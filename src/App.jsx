@@ -592,7 +592,7 @@ function MatchView({match,squad,injuries,onUpdate,onInjure,onUpdateTeam,onBack})
         <button onClick={onBack} style={{background:C.blackLight,border:`1px solid ${C.border}`,
           color:C.chalkDim,borderRadius:8,padding:"8px 14px",cursor:"pointer",
           fontSize:13,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.04em"}}>
-          <- Back
+          ← Back
         </button>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:isMobile?20:26,
