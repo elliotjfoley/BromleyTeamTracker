@@ -14,12 +14,9 @@ const firebaseConfig = {
   measurementId: "G-XQ5J4JJQ3K"
 };
 
-const firebaseApp = initializeApp(FIREBASE_CONFIG);
+// FIX: Use 'firebaseConfig' (lowercase) to match the variable above
+const firebaseApp = initializeApp(firebaseConfig);
 const db          = getDatabase(firebaseApp);
-
-const dbSet    = (path, val) => set(ref(db, path), val);
-const dbUpdate = (path, val) => update(ref(db, path), val);
-const dbListen = (path, cb)  => { const r = ref(db, path); onValue(r, snap => cb(snap.val())); return r; };
 
 // ─── Colours ─────────────────────────────────────────────────────────────────
 const C = {
@@ -823,3 +820,4 @@ export default function App(){
     </div>
   );
 }
+export default App;
