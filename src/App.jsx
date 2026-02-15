@@ -106,7 +106,7 @@ function parseCSV(text){
   return lines.slice(1).map(line=>{
     const cols=line.split(",").map(s=>s.trim()); const row={};
     hdr.forEach((h,i)=>row[h]=cols[i]||"");
-    return { id:uid(), name:row.name||row["player name"]||"", pos:row.position||row.pos||"", num:parseInt(row.number||row["#"]||"0")||0 };
+    return { id:uid(), name:row.name||row["player name"]||"", pos:row.position||row.pos||"" };
   }).filter(p=>p.name);
 }
 
@@ -221,7 +221,7 @@ function Dashboard({matches,squad,injuries,onGo}){
     <div style={{display:"flex",flexDirection:"column",gap:20}}>
       {/* Next match banner */}
       {next?(
-        <div onClick={()=>onGo("match",next.id)} style={{background:C.blackCard,border:`1px solid ${C.border}`,borderLeft:`4px solid ${C.amber}`,borderRadius:12,padding:"20px 20px",cursor:"pointer",boxShadow:`0 0 24px ${C.amberGlow}`}}>
+        <div onClick={()=>onGo("matches",next.id)} style={{background:C.blackCard,border:`1px solid ${C.border}`,borderLeft:`4px solid ${C.amber}`,borderRadius:12,padding:"20px 20px",cursor:"pointer",boxShadow:`0 0 24px ${C.amberGlow}`}}>
           <div style={{fontSize:10,color:C.amber,letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:800,marginBottom:6}}>Next Match</div>
           <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:isMobile?26:32,fontWeight:900,color:C.chalk,lineHeight:1.1}}>
             {next.homeTeam} <span style={{color:C.amber}}>vs</span> {next.awayTeam}
@@ -276,7 +276,7 @@ function Dashboard({matches,squad,injuries,onGo}){
       {[...matches].sort((a,b)=>a.date.localeCompare(b.date)).map(m=>{
         const ms=stats(m); const isPast=m.date<today();
         return(
-          <Card key={m.id} style={{padding:"14px 18px",cursor:"pointer",opacity:isPast?0.55:1}} onClick={()=>onGo("match",m.id)}>
+          <Card key={m.id} style={{padding:"14px 18px",cursor:"pointer",opacity:isPast?0.55:1}} onClick={()=>onGo("matches",m.id)}>
             <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:17,color:C.chalk}}>
               {m.homeTeam} <span style={{color:C.amber}}>vs</span> {m.awayTeam}
               {isPast&&<span style={{color:C.chalkDim,fontSize:12,marginLeft:8,fontWeight:400}}>[Past]</span>}
@@ -312,7 +312,6 @@ function PlayerCard({player,matchData,onUpdate,onInjure}){
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
         <div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:20,fontWeight:900,color:C.amber}}>{player.num||"—"}</span>
             <span style={{fontSize:15,fontWeight:700,color:C.chalk}}>{player.name}</span>
           </div>
           <div style={{fontSize:11,color:C.chalkDim,marginTop:1}}>{player.pos}</div>
@@ -338,13 +337,15 @@ function PlayerCard({player,matchData,onUpdate,onInjure}){
         </div>
       </div>
 
-      {/* Assigned to */}
-      <div>
-        <Label>Assigned To</Label>
-        <input value={assignee} onChange={e=>onUpdate({assignedTo:e.target.value})} placeholder="Who's handling this player?"
-          style={{width:"100%",background:assignee?C.blue+"18":"transparent",border:`1px solid ${assignee?C.blue+"55":C.border}`,color:assignee?C.blueLight:C.chalkDim,borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}
-        />
-      </div>
+      {/* Assigned to — hidden once player is available */}
+      {avail!=="available"&&(
+        <div>
+          <Label>Assigned To</Label>
+          <input value={assignee} onChange={e=>onUpdate({assignedTo:e.target.value})} placeholder="Who's handling this player?"
+            style={{width:"100%",background:assignee?C.blue+"18":"transparent",border:`1px solid ${assignee?C.blue+"55":C.border}`,color:assignee?C.blueLight:C.chalkDim,borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}
+          />
+        </div>
+      )}
 
       {/* Notes */}
       <div>
@@ -723,15 +724,14 @@ function SquadPage({squad,injuries,onSetSquad,onInjure,onClearInjury}){
   const [showImport,setShowImport]=useState(false);
   const [addName,setAddName]=useState("");
   const [addPos, setAddPos] =useState(POSITIONS[0]);
-  const [addNum, setAddNum] =useState("");
   const [csvText,setCsvText]=useState("");
   const [csvErr, setCsvErr] =useState("");
   const fileRef=useRef();
 
   const addPlayer=()=>{
     if(!addName.trim()) return;
-    onSetSquad([...squad,{id:uid(),name:addName.trim(),pos:addPos,num:parseInt(addNum)||0}]);
-    setAddName(""); setAddNum(""); setShowAdd(false);
+    onSetSquad([...squad,{id:uid(),name:addName.trim(),pos:addPos}]);
+    setAddName(""); setShowAdd(false);
   };
   const removePlayer=id=>onSetSquad(squad.filter(p=>p.id!==id));
   const loadDemo=()=>onSetSquad(DEMO_SQUAD.map(p=>({...p,id:uid()})));
@@ -754,11 +754,10 @@ function SquadPage({squad,injuries,onSetSquad,onInjure,onClearInjury}){
 
       {squad.length===0&&<Card style={{padding:"28px 20px",textAlign:"center",color:C.chalkDim}}>No players yet.</Card>}
 
-      {[...squad].sort((a,b)=>(a.num||99)-(b.num||99)).map(p=>{
+      {[...squad].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>{
         const inj=injuries[p.id];
         return(
           <Card key={p.id} style={{padding:"14px 16px",borderLeft:`4px solid ${inj?C.orange:C.chalkFaint}`,display:"flex",alignItems:"center",gap:12}}>
-            <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:900,color:inj?C.orange:C.amber,width:32,textAlign:"center",flexShrink:0}}>{p.num||"—"}</div>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:14,fontWeight:700,color:inj?C.chalkDim:C.chalk}}>{p.name}{inj&&<span style={{fontSize:11,color:C.orange,marginLeft:8}}>🩹 Injured</span>}</div>
               <div style={{fontSize:12,color:C.chalkDim}}>{p.pos}{inj&&<> · Back {fmtDate(inj.returnDate)}</>}</div>
@@ -779,7 +778,6 @@ function SquadPage({squad,injuries,onSetSquad,onInjure,onClearInjury}){
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <div><Label>Full Name</Label><Input value={addName} onChange={setAddName} placeholder="e.g. John Smith"/></div>
           <div><Label>Position</Label><Sel value={addPos} onChange={setAddPos} style={{width:"100%"}} options={POSITIONS.map(p=>({v:p,l:p}))}/></div>
-          <div><Label>Jersey Number</Label><Input value={addNum} onChange={setAddNum} placeholder="#" type="number"/></div>
           <Btn onClick={addPlayer} disabled={!addName.trim()} full>Add to Squad</Btn>
         </div>
       </Modal>
@@ -788,8 +786,8 @@ function SquadPage({squad,injuries,onSetSquad,onInjure,onClearInjury}){
       <Modal open={showImport} onClose={()=>setShowImport(false)} title="Import CSV">
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <div style={{fontSize:12,color:C.chalkDim,lineHeight:1.7}}>
-            CSV columns: <strong style={{color:C.chalk}}>name</strong>, <strong style={{color:C.chalk}}>position</strong>, <strong style={{color:C.chalk}}>number</strong><br/>
-            Header row: <code style={{color:C.amber,background:C.blackLight,padding:"1px 5px",borderRadius:4}}>name,position,number</code>
+            CSV columns: <strong style={{color:C.chalk}}>name</strong>, <strong style={{color:C.chalk}}>position</strong><br/>
+            Header row: <code style={{color:C.amber,background:C.blackLight,padding:"1px 5px",borderRadius:4}}>name,position</code>
           </div>
           <input ref={fileRef} type="file" accept=".csv,.txt" onChange={handleFile} style={{color:C.chalk,fontSize:13}}/>
           {csvText&&<textarea value={csvText} onChange={e=>setCsvText(e.target.value)} rows={6} style={{background:C.blackLight,border:`1px solid ${C.border}`,color:C.chalk,borderRadius:8,padding:"8px 12px",fontSize:12,fontFamily:"monospace",resize:"vertical",outline:"none"}}/>}
