@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import React from "react";
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref, onValue, set, update } from "firebase/database";
+import { getDatabase } from "firebase/database";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAFqpLxTkBAVK0L35_93RUPdQASyK8u16Q",
@@ -16,13 +16,12 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const db          = getDatabase(firebaseApp);
 
-// ─── App Component ──────────────────────────────────────────────────────────
 function App() {
   return (
-    <div style={{ background: '#0a0a0a', minHeight: '100vh', color: '#f5f0e8', padding: '20px', textAlign: 'center' }}>
+    <div style={{ background: '#0a0a0a', minHeight: '100vh', color: '#f5f0e8', padding: '20px', textAlign: 'center', fontFamily: 'sans-serif' }}>
       <img src="https://bromleyrfc.org/wp-content/uploads/2021/10/cropped-siteicon.png" style={{ width: '80px' }} alt="Logo" />
-      <h1 style={{ fontFamily: 'sans-serif' }}>BROMLEY RFC SQUAD TRACKER</h1>
-      <p>Database connected. App is ready for squad data.</p>
+      <h1>BROMLEY RFC</h1>
+      <p>System Online. Waiting for Squad Data.</p>
     </div>
   );
 }
