@@ -372,17 +372,171 @@ function PlayerCard({player,matchData,onUpdate,onInjure}){
   );
 }
 
-// ─── Match View ───────────────────────────────────────────────────────────────
-function MatchView({match,squad,injuries,onUpdate,onInjure,onBack}){
+// ─── Shirt positions for Team Builder ────────────────────────────────────────
+const SHIRT_SLOTS=[
+  {num:1, pos:"Loosehead Prop"},  {num:2, pos:"Hooker"},
+  {num:3, pos:"Tighthead Prop"},  {num:4, pos:"Lock"},
+  {num:5, pos:"Lock"},            {num:6, pos:"Blindside Flanker"},
+  {num:7, pos:"Openside Flanker"},{num:8, pos:"Number Eight"},
+  {num:9, pos:"Scrum-half"},      {num:10,pos:"Fly-half"},
+  {num:11,pos:"Left Wing"},       {num:12,pos:"Inside Centre"},
+  {num:13,pos:"Outside Centre"},  {num:14,pos:"Right Wing"},
+  {num:15,pos:"Fullback"},
+];
+
+// ─── Team Builder ─────────────────────────────────────────────────────────────
+function TeamBuilder({match,squad,injuries,onUpdateTeam}){
+  const isMobile=useIsMobile();
+  const active=squad.filter(p=>!injuries[p.id]);
+  const eligible=active.filter(p=>(match.players||{})[p.id]?.availability==="available");
+  const team=match.team||{};
+  const assignedIds=new Set(Object.values(team).filter(Boolean));
+
+  const setSlot=(slotKey,playerId)=>{
+    const updated={...team};
+    Object.keys(updated).forEach(k=>{if(updated[k]===playerId) delete updated[k];});
+    if(playerId) updated[slotKey]=playerId; else delete updated[slotKey];
+    onUpdateTeam(match.id,updated);
+  };
+
+  const addReservistSlot=()=>{
+    onUpdateTeam(match.id,{...team,[`res_${Date.now()}`]:""});
+  };
+
+  const removeReservistSlot=(key)=>{
+    const updated={...team}; delete updated[key];
+    onUpdateTeam(match.id,updated);
+  };
+
+  const reservistKeys=Object.keys(team).filter(k=>k.startsWith("res_")).sort();
+  const startingCount=SHIRT_SLOTS.filter(s=>team[`shirt_${s.num}`]).length;
+  const reservistCount=reservistKeys.filter(k=>team[k]).length;
+  const unplaced=eligible.filter(p=>!assignedIds.has(p.id));
+
+  const playerOpts=(currentPid)=>[
+    {v:"",l:"— Select player —"},
+    ...eligible.map(p=>({
+      v:p.id,
+      l:`${p.num||"?"}.  ${p.name}  (${p.pos})`,
+      taken:assignedIds.has(p.id)&&p.id!==currentPid,
+    })),
+  ];
+
+  const SlotRow=({slotKey,shirtNum,posLabel,isReservist=false,onRemove})=>{
+    const pid=team[slotKey]||"";
+    const opts=playerOpts(pid);
+    const accent=isReservist?C.blue:C.amber;
+    return(
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",
+        borderBottom:`1px solid ${C.chalkFaint}`,transition:"background 0.1s"}}
+        onMouseEnter={e=>e.currentTarget.style.background=C.blackLight}
+        onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+      >
+        <div style={{width:38,height:38,borderRadius:8,flexShrink:0,display:"flex",
+          alignItems:"center",justifyContent:"center",
+          background:pid?accent+"22":C.blackLight,border:`2px solid ${pid?accent:C.chalkFaint}`}}>
+          <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:17,fontWeight:900,
+            color:pid?accent:C.chalkDim}}>{shirtNum}</span>
+        </div>
+        <div style={{fontSize:12,color:C.chalkDim,width:isMobile?80:130,flexShrink:0,lineHeight:1.3}}>{posLabel}</div>
+        <select value={pid} onChange={e=>setSlot(slotKey,e.target.value)}
+          style={{flex:1,minWidth:0,background:pid?accent+"14":C.blackLight,
+            border:`1px solid ${pid?accent+"55":C.border}`,color:pid?C.chalk:C.chalkDim,
+            borderRadius:8,padding:"9px 10px",fontSize:13,fontWeight:pid?700:400,
+            cursor:"pointer",outline:"none"}}>
+          {opts.map(o=>(
+            <option key={o.v} value={o.v} disabled={o.taken} style={{color:o.taken?"#555":undefined}}>
+              {o.l}{o.taken?" (picked)":""}
+            </option>
+          ))}
+        </select>
+        {onRemove&&(
+          <button onClick={onRemove} style={{background:"none",border:"none",color:C.red,
+            cursor:"pointer",fontSize:18,lineHeight:1,flexShrink:0,opacity:0.5}}
+            onMouseEnter={e=>e.currentTarget.style.opacity=1}
+            onMouseLeave={e=>e.currentTarget.style.opacity=0.5}>✕</button>
+        )}
+      </div>
+    );
+  };
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:16}}>
+      {eligible.length===0&&(
+        <Card style={{padding:"24px 20px",textAlign:"center",color:C.chalkDim}}>
+          No players marked as <strong style={{color:C.green}}>Available</strong> yet.
+          <span style={{fontSize:12,marginTop:6,display:"block"}}>
+            Use the Comms Tracker tab to set availability first.
+          </span>
+        </Card>
+      )}
+      {eligible.length>0&&(
+        <>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <Pill color={C.amber}>{startingCount}/15 starters</Pill>
+            <Pill color={C.blue}>{reservistCount} reservists</Pill>
+            <Pill color={C.green}>{eligible.length} available to pick</Pill>
+          </div>
+
+          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:C.amber,
+            letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:800}}>Starting XV</div>
+          <Card style={{overflow:"hidden"}}>
+            {SHIRT_SLOTS.map(s=>(
+              <SlotRow key={s.num} slotKey={`shirt_${s.num}`} shirtNum={s.num} posLabel={s.pos}/>
+            ))}
+          </Card>
+
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:C.blue,
+              letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:800}}>Reservists</div>
+            <Btn small variant="ghost" onClick={addReservistSlot}>+ Add Slot</Btn>
+          </div>
+
+          {reservistKeys.length===0&&(
+            <Card style={{padding:"18px 20px",textAlign:"center",color:C.chalkDim,fontSize:13}}>
+              Tap "+ Add Slot" to add reservists (16, 17, 18…)
+            </Card>
+          )}
+          {reservistKeys.length>0&&(
+            <Card style={{overflow:"hidden"}}>
+              {reservistKeys.map((k,i)=>(
+                <SlotRow key={k} slotKey={k} shirtNum={16+i} posLabel="Reservist"
+                  isReservist onRemove={()=>removeReservistSlot(k)}/>
+              ))}
+            </Card>
+          )}
+
+          {unplaced.length>0&&(
+            <>
+              <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:C.chalkDim,
+                letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:800}}>
+                Available — Not Yet Picked ({unplaced.length})
+              </div>
+              <Card style={{padding:"12px 14px",display:"flex",flexWrap:"wrap",gap:8}}>
+                {unplaced.map(p=>(
+                  <div key={p.id} style={{background:C.blackLight,border:`1px solid ${C.border}`,
+                    borderRadius:8,padding:"6px 12px",fontSize:12,color:C.chalkDim}}>
+                    <span style={{color:C.amber,fontWeight:800,marginRight:4}}>{p.num||"?"}</span>
+                    {p.name}<span style={{fontSize:10,color:C.chalkDim,marginLeft:4}}>({p.pos})</span>
+                  </div>
+                ))}
+              </Card>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Comms Tracker ────────────────────────────────────────────────────────────
+function CommsTracker({match,squad,injuries,onUpdate,onInjure}){
   const [filterAvail,setFilterAvail]=useState("all");
   const [filterComm, setFilterComm] =useState("all");
   const [filterPos,  setFilterPos]  =useState("all");
   const [search,     setSearch]     =useState("");
-  const isMobile=useIsMobile();
-
   const active=squad.filter(p=>!injuries[p.id]);
   const players=match.players||{};
-
   const filtered=active.filter(p=>{
     const md=players[p.id]||{};
     if(filterAvail!=="all"&&(md.availability||"unknown")!==filterAvail) return false;
@@ -391,34 +545,19 @@ function MatchView({match,squad,injuries,onUpdate,onInjure,onBack}){
     if(search&&!p.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
-
   const positions=[...new Set(active.map(p=>p.pos))];
   const available=active.filter(p=>(players[p.id]?.availability||"unknown")==="available").length;
   const notContacted=active.filter(p=>(players[p.id]?.commStatus||"not_contacted")==="not_contacted").length;
-
   return(
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
-      {/* Header */}
-      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-        <button onClick={onBack} style={{background:C.blackLight,border:`1px solid ${C.border}`,color:C.chalkDim,borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.04em"}}>← Back</button>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:isMobile?20:26,fontWeight:900,color:C.chalk,lineHeight:1.1}}>
-            {match.homeTeam} <span style={{color:C.amber}}>vs</span> {match.awayTeam}
-          </div>
-          <div style={{fontSize:12,color:C.chalkDim,marginTop:2}}>
-            {fmtDate(match.date)}{match.kickoff&&` · KO ${match.kickoff}`}
-          </div>
-        </div>
-      </div>
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
         <Pill color={C.green}>{available} available</Pill>
         <Pill color={C.chalkDim}>{notContacted} to contact</Pill>
       </div>
-
-      {/* Filters */}
       <Card style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:10}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search player…"
-          style={{background:C.blackLight,border:`1px solid ${C.border}`,color:C.chalk,borderRadius:8,padding:"9px 12px",fontSize:14,outline:"none",width:"100%"}}
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search player..."
+          style={{background:C.blackLight,border:`1px solid ${C.border}`,color:C.chalk,
+            borderRadius:8,padding:"9px 12px",fontSize:14,outline:"none",width:"100%"}}
         />
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <Sel value={filterAvail} onChange={setFilterAvail} options={[{v:"all",l:"All Availability"},...Object.entries(AVAIL).map(([k,v])=>({v:k,l:v.label}))]}/>
@@ -427,18 +566,69 @@ function MatchView({match,squad,injuries,onUpdate,onInjure,onBack}){
         <Sel value={filterPos} onChange={setFilterPos} options={[{v:"all",l:"All Positions"},...positions.map(p=>({v:p,l:p}))]} style={{width:"100%"}}/>
         <div style={{fontSize:11,color:C.chalkDim,textAlign:"right"}}>{filtered.length} of {active.length} players</div>
       </Card>
-
-      {/* Player cards */}
       {filtered.length===0&&<div style={{color:C.chalkDim,fontSize:13,textAlign:"center",padding:"24px 0"}}>No players match filters.</div>}
       {filtered.map(p=>(
-        <PlayerCard
-          key={p.id}
-          player={p}
-          matchData={players[p.id]}
+        <PlayerCard key={p.id} player={p} matchData={players[p.id]}
           onUpdate={patch=>onUpdate(match.id,p.id,patch)}
           onInjure={()=>onInjure(p)}
         />
       ))}
+    </div>
+  );
+}
+
+// ─── Match View — tabbed ──────────────────────────────────────────────────────
+function MatchView({match,squad,injuries,onUpdate,onInjure,onUpdateTeam,onBack}){
+  const [activeTab,setActiveTab]=useState("comms");
+  const isMobile=useIsMobile();
+  const active=squad.filter(p=>!injuries[p.id]);
+  const players=match.players||{};
+  const available=active.filter(p=>(players[p.id]?.availability||"unknown")==="available").length;
+  const notContacted=active.filter(p=>(players[p.id]?.commStatus||"not_contacted")==="not_contacted").length;
+  const teamSize=Object.values(match.team||{}).filter(Boolean).length;
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:16}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <button onClick={onBack} style={{background:C.blackLight,border:`1px solid ${C.border}`,
+          color:C.chalkDim,borderRadius:8,padding:"8px 14px",cursor:"pointer",
+          fontSize:13,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.04em"}}>
+          <- Back
+        </button>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:isMobile?20:26,
+            fontWeight:900,color:C.chalk,lineHeight:1.1}}>
+            {match.homeTeam} <span style={{color:C.amber}}>vs</span> {match.awayTeam}
+          </div>
+          <div style={{fontSize:12,color:C.chalkDim,marginTop:2}}>
+            {fmtDate(match.date)}{match.kickoff&&` · KO ${match.kickoff}`}{match.venue&&` · ${match.venue}`}
+          </div>
+        </div>
+      </div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <Pill color={C.green}>{available} available</Pill>
+        <Pill color={C.chalkDim}>{notContacted} to contact</Pill>
+        {teamSize>0&&<Pill color={C.amber}>{teamSize} selected</Pill>}
+      </div>
+      <div style={{display:"flex",background:C.blackLight,borderRadius:10,padding:4,gap:4,
+        border:`1px solid ${C.border}`}}>
+        {[{id:"comms",label:"Comms Tracker",icon:"📞"},{id:"team",label:"Team Builder",icon:"🏉"}].map(t=>(
+          <button key={t.id} onClick={()=>setActiveTab(t.id)} style={{
+            flex:1,padding:"11px 8px",borderRadius:8,border:"none",cursor:"pointer",
+            fontWeight:800,fontSize:isMobile?12:13,letterSpacing:"0.04em",textTransform:"uppercase",
+            transition:"all 0.15s",
+            background:activeTab===t.id?C.amber:"transparent",
+            color:activeTab===t.id?C.black:C.chalkDim,
+          }}>{t.icon} {t.label}</button>
+        ))}
+      </div>
+      {activeTab==="comms"&&(
+        <CommsTracker match={match} squad={squad} injuries={injuries}
+          onUpdate={onUpdate} onInjure={onInjure}/>
+      )}
+      {activeTab==="team"&&(
+        <TeamBuilder match={match} squad={squad} injuries={injuries}
+          onUpdateTeam={onUpdateTeam}/>
+      )}
     </div>
   );
 }
@@ -720,6 +910,11 @@ export default function App(){
     saveMatches(updated);
   };
 
+  const updateTeam=(matchId,team)=>{
+    const updated=matches.map(m=>m.id===matchId?{...m,team}:m);
+    saveMatches(updated);
+  };
+
   const selectedMatch=matches.find(m=>m.id===matchId);
   const isMatchView=tab==="matches"&&matchId&&selectedMatch;
 
@@ -798,7 +993,7 @@ export default function App(){
         {tab==="dashboard"&&<Dashboard matches={matches} squad={squad} injuries={injuries} onGo={goTo}/>}
         {tab==="squad"    &&<SquadPage squad={squad} injuries={injuries} onSetSquad={saveSquad} onInjure={p=>setInjureTarget(p)} onClearInjury={clearInjury}/>}
         {tab==="matches"&&!isMatchView&&<MatchesPage matches={matches} onAdd={addMatch} onDelete={deleteMatch} onSelect={id=>setMatchId(id)}/>}
-        {isMatchView&&<MatchView match={selectedMatch} squad={squad} injuries={injuries} onUpdate={updatePlayer} onInjure={p=>setInjureTarget(p)} onBack={()=>setMatchId(null)}/>}
+        {isMatchView&&<MatchView match={selectedMatch} squad={squad} injuries={injuries} onUpdate={updatePlayer} onInjure={p=>setInjureTarget(p)} onUpdateTeam={updateTeam} onBack={()=>setMatchId(null)}/>}
         {tab==="injuries"&&<InjuryPool squad={squad} injuries={injuries} onClear={clearInjury} onAdd={addInjury}/>}
       </main>
 
