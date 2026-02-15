@@ -2,16 +2,17 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, onValue, set, update } from "firebase/database";
 
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyAFqpLxTkBAVK0L35_93RUPdQASyK8u16Q",
-  authDomain: "bromleyteamtracker.firebaseapp.com",
-  databaseURL: "https://bromleyteamtracker-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "bromleyteamtracker",
-  storageBucket: "bromleyteamtracker.firebasestorage.app",
-  messagingSenderId: "53638758399",
-  appId: "1:53638758399:web:1b4150b4d545278bfe31ca",
-  measurementId: "G-XQ5J4JJQ3K"
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔥 FIREBASE CONFIG — paste your own values here from the Firebase console
+// ─────────────────────────────────────────────────────────────────────────────
+const FIREBASE_CONFIG = {
+  apiKey:            "PASTE_YOUR_apiKey_HERE",
+  authDomain:        "PASTE_YOUR_authDomain_HERE",
+  databaseURL:       "PASTE_YOUR_databaseURL_HERE",
+  projectId:         "PASTE_YOUR_projectId_HERE",
+  storageBucket:     "PASTE_YOUR_storageBucket_HERE",
+  messagingSenderId: "PASTE_YOUR_messagingSenderId_HERE",
+  appId:             "PASTE_YOUR_appId_HERE",
 };
 
 const firebaseApp = initializeApp(FIREBASE_CONFIG);
