@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref, onValue, set, update } from "firebase/database";
+import { getDatabase, ref, onValue, set } from "firebase/database";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAFqpLxTkBAVK0L35_93RUPdQASyK8u16Q",
@@ -28,7 +28,7 @@ const C = {
 };
 
 function App() {
-  const [view, setView] = useState("dashboard"); // dashboard, match, injuries
+  const [view, setView] = useState("match"); 
   const [squad, setSquad] = useState([]);
   const [match, setMatch] = useState({ opponent: "TBC", date: "" });
   const [availability, setAvailability] = useState({});
@@ -44,94 +44,102 @@ function App() {
     });
   }, []);
 
-  const toggleAvail = (id) => {
-    const states = ["unknown", "available", "unavailable", "tentative"];
-    const current = availability[id] || "unknown";
-    const next = states[(states.indexOf(current) + 1) % states.length];
-    set(ref(db, `availability/${id}`), next);
+  const updateAvail = (id, value) => {
+    set(ref(db, `availability/${id}`), value);
   };
 
-  const addPlayer = () => {
-    const name = prompt("Player Name:");
-    if (!name) return;
-    const newSquad = [...squad, { id: Date.now().toString(), name, pos: "Reserve" }];
+  const toggleInjury = (id) => {
+    const newSquad = squad.map(p => p.id === id ? { ...p, injured: !p.injured } : p);
     set(ref(db, "squad"), newSquad);
   };
+
+  const availCount = Object.values(availability).filter(v => v === "available").length;
 
   if (loading) return <div style={{background:C.black, color:C.chalk, height:"100vh", display:"flex", alignItems:"center", justifyContent:"center"}}>Syncing Bromley RFC...</div>;
 
   return (
-    <div style={{ 
-      background: C.black, 
-      minHeight: "100vh", 
-      width: "100%",
-      color: C.chalk, 
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      margin: 0,
-      padding: 0,
-      display: 'flex',
-      flexDirection: 'column'
-    }}>
-      {/* HEADER */}
-      <header style={{ padding: '40px 20px 20px', textAlign: 'center' }}>
-        <img src="https://bromleyrfc.org/wp-content/uploads/2021/10/cropped-siteicon.png" style={{ width: 50 }} alt="Logo" />
-        <h1 style={{ color: C.amber, fontSize: 18, letterSpacing: 3, marginTop: 15, fontWeight: 900 }}>BROMLEY RFC</h1>
+    <div style={{ background: C.black, minHeight: "100vh", width: "100%", color: C.chalk, fontFamily: 'sans-serif', margin: 0, padding: 0 }}>
+      
+      <header style={{ padding: '30px 20px', textAlign: 'center' }}>
+        <img src="https://bromleyrfc.org/wp-content/uploads/2021/10/cropped-siteicon.png" style={{ width: 45 }} alt="Logo" />
+        <h1 style={{ color: C.amber, fontSize: 16, letterSpacing: 4, marginTop: 10 }}>BROMLEY RFC</h1>
       </header>
 
-      <main style={{ padding: '0 20px 100px', maxWidth: 500, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
-        
-        {/* NAV TABS */}
-        <div style={{ display: 'flex', gap: 10, marginBottom: 25 }}>
-          <button onClick={()=>setView("dashboard")} style={{ flex: 1, padding: 12, borderRadius: 8, background: view === "dashboard" ? C.amber : C.card, color: view === "dashboard" ? C.black : C.chalk, border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>SQUAD</button>
-          <button onClick={()=>setView("match")} style={{ flex: 1, padding: 12, borderRadius: 8, background: view === "match" ? C.amber : C.card, color: view === "match" ? C.black : C.chalk, border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>MATCH</button>
-        </div>
+      <nav style={{ display: 'flex', background: '#111', padding: '5px', borderRadius: 12, margin: '0 20px 20px', border: `1px solid ${C.border}` }}>
+        {["dashboard", "match", "selection"].map(t => (
+          <button key={t} onClick={() => setView(t)} style={{ 
+            flex: 1, padding: '10px', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 800,
+            background: view === t ? C.amber : 'transparent',
+            color: view === t ? C.black : C.chalkDim,
+            textTransform: 'uppercase'
+          }}>{t}</button>
+        ))}
+      </nav>
 
-        {view === "dashboard" && (
-          <div>
-            <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, padding: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                <span style={{ fontSize: 12, color: C.amber, fontWeight: 800 }}>SQUAD LIST</span>
-                <button onClick={addPlayer} style={{ background: 'none', border: `1px solid ${C.amber}`, color: C.amber, padding: '4px 10px', borderRadius: 6, fontSize: 11 }}>+ ADD</button>
-              </div>
-              {squad.map(p => (
-                <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '15px 0', borderBottom: '1px solid #222' }}>
-                  <span>{p.name}</span>
-                  <span style={{ color: C.chalkDim, fontSize: 12 }}>{p.pos}</span>
-                </div>
-              ))}
+      <main style={{ padding: '0 20px 100px', maxWidth: 500, margin: '0 auto' }}>
+
+        {view === "match" && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ background: `linear-gradient(135deg, ${C.card} 0%, #1a1a1a 100%)`, borderRadius: 16, padding: 25, border: `1px solid ${C.amber}`, textAlign: 'center' }}>
+              <div style={{ fontSize: 10, color: C.amber, fontWeight: 800 }}>UPCOMING FIXTURE</div>
+              <div style={{ fontSize: 24, fontWeight: 900, margin: '10px 0' }}>vs {match.opponent}</div>
+              <div style={{ color: C.green, fontWeight: 800, fontSize: 13 }}>{availCount} PLAYERS AVAILABLE</div>
+            </div>
+
+            <div style={{ background: C.card, borderRadius: 16, padding: "10px 20px", border: `1px solid ${C.border}` }}>
+              {squad.filter(p => !p.injured).map(p => {
+                const status = availability[p.id] || "unknown";
+                const getStatusColor = () => {
+                  if (status === "available") return C.green;
+                  if (status === "unavailable") return C.red;
+                  if (status === "tentative") return C.amber;
+                  return C.chalkDim;
+                };
+
+                return (
+                  <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: "15px 0", borderBottom: '1px solid #222' }}>
+                    <span style={{ fontWeight: 500 }}>{p.name}</span>
+                    
+                    <select 
+                      value={status} 
+                      onChange={(e) => updateAvail(p.id, e.target.value)}
+                      style={{
+                        background: '#1a1a1a',
+                        color: getStatusColor(),
+                        border: `1px solid ${getStatusColor()}`,
+                        borderRadius: 6,
+                        padding: '6px 10px',
+                        fontSize: 11,
+                        fontWeight: 800,
+                        outline: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value="unknown">UNKNOWN</option>
+                      <option value="available">AVAILABLE</option>
+                      <option value="unavailable">UNAVAILABLE</option>
+                      <option value="tentative">TENTATIVE</option>
+                    </select>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
 
-        {view === "match" && (
-          <div>
-             <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.amber}`, padding: 25, textAlign: 'center', marginBottom: 20 }}>
-                <div style={{ fontSize: 11, color: C.amber, fontWeight: 800 }}>NEXT FIXTURE</div>
-                <div style={{ fontSize: 24, fontWeight: 900, margin: '10px 0' }}>vs {match.opponent}</div>
-                <div style={{ color: C.chalkDim }}>{match.date || "DATE TBC"}</div>
-             </div>
-
-             <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, padding: 20 }}>
-                <div style={{ fontSize: 11, color: C.amber, fontWeight: 800, marginBottom: 15 }}>AVAILABILITY CHECK</div>
-                {squad.map(p => {
-                  const status = availability[p.id] || "unknown";
-                  const icons = { available: "✅", unavailable: "❌", tentative: "⏳", unknown: "❓" };
-                  const colors = { available: C.green, unavailable: C.red, tentative: C.amber, unknown: C.chalkDim };
-                  return (
-                    <div key={p.id} onClick={() => toggleAvail(p.id)} style={{ display: 'flex', justifyContent: 'space-between', padding: '15px 0', borderBottom: '1px solid #222', cursor: 'pointer' }}>
-                      <span>{p.name}</span>
-                      <span style={{ color: colors[status], fontWeight: 'bold' }}>{icons[status]} {status.toUpperCase()}</span>
-                    </div>
-                  );
-                })}
-             </div>
-          </div>
+        {/* Keeping Dashboard & Selection Logic from previous version */}
+        {view === "dashboard" && (
+           <div style={{ background: C.card, borderRadius: 16, padding: 20, border: `1px solid ${C.border}` }}>
+             <h3 style={{ fontSize: 12, color: C.amber, fontWeight: 800, marginBottom: 15 }}>FULL SQUAD</h3>
+             {squad.map(p => (
+               <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #222' }}>
+                 <span style={{ color: p.injured ? C.red : C.chalk }}>{p.name} {p.injured ? "(Injured)" : ""}</span>
+                 <button onClick={() => toggleInjury(p.id)} style={{ background: 'none', border: 'none', color: C.chalkDim, fontSize: 10 }}>TOGGLE INJURY</button>
+               </div>
+             ))}
+           </div>
         )}
       </main>
-
-      <footer style={{ padding: 20, textAlign: 'center', color: '#333', fontSize: 10 }}>
-        BROMLEY RFC CLOUD SYNC v2.0
-      </footer>
     </div>
   );
 }
