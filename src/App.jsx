@@ -52,10 +52,8 @@ const LOGO = "https://bromleyrfc.org/wp-content/uploads/2021/10/cropped-siteicon
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 const POSITIONS = [
-  "Loosehead Prop","Hooker","Tighthead Prop","Lock","Lock",
-  "Blindside Flanker","Openside Flanker","Number Eight",
-  "Scrum-half","Fly-half","Left Wing","Inside Centre","Outside Centre",
-  "Right Wing","Fullback","Utility Forward","Utility Back","Reserve",
+  "Front Row","2nd Row","Back Row",
+  "Scrum Half","Fly Half","Centres","Back 3","Utility",
 ];
 
 const AVAIL = {
@@ -388,6 +386,7 @@ const SHIRT_SLOTS=[
 // ─── Team Builder ─────────────────────────────────────────────────────────────
 function TeamBuilder({match,squad,injuries,onUpdateTeam}){
   const isMobile=useIsMobile();
+  const [copied,setCopied]=useState(false);
   const active=squad.filter(p=>!injuries[p.id]);
   const eligible=active.filter(p=>(match.players||{})[p.id]?.availability==="available");
   const team=match.team||{};
@@ -461,6 +460,25 @@ function TeamBuilder({match,squad,injuries,onUpdateTeam}){
     );
   };
 
+  const copyTeam=()=>{
+    const lines=[];
+    SHIRT_SLOTS.forEach(s=>{
+      const pid=team[`shirt_${s.num}`];
+      const pl=pid?active.find(p=>p.id===pid):null;
+      lines.push(`${s.num}. ${pl?pl.name:"TBC"}`);
+    });
+    reservistKeys.forEach((k,i)=>{
+      const pid=team[k];
+      const pl=pid?active.find(p=>p.id===pid):null;
+      lines.push(`${16+i}. ${pl?pl.name:"TBC"}`);
+    });
+    const matchTitle=`${match.homeTeam} vs ${match.awayTeam} — ${fmtDate(match.date)}`;
+    const text=`🏉 ${matchTitle}\n\n${lines.join("\n")}`;
+    navigator.clipboard.writeText(text).then(()=>{
+      setCopied(true); setTimeout(()=>setCopied(false),2500);
+    }).catch(()=>alert(text));
+  };
+
   return(
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
       {eligible.length===0&&(
@@ -473,10 +491,18 @@ function TeamBuilder({match,squad,injuries,onUpdateTeam}){
       )}
       {eligible.length>0&&(
         <>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
             <Pill color={C.amber}>{startingCount}/15 starters</Pill>
             <Pill color={C.blue}>{reservistCount} reservists</Pill>
             <Pill color={C.green}>{eligible.length} available to pick</Pill>
+            <button onClick={copyTeam} style={{marginLeft:"auto",
+              background:copied?C.green+"22":C.blackLight,
+              border:`1px solid ${copied?C.green+"55":C.border}`,
+              color:copied?C.green:C.chalk,borderRadius:8,padding:"8px 14px",
+              fontSize:12,fontWeight:800,cursor:"pointer",letterSpacing:"0.04em",
+              textTransform:"uppercase",transition:"all 0.2s"}}>
+              {copied?"✓ Copied!":"📋 Copy Team"}
+            </button>
           </div>
 
           <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:C.amber,
@@ -720,18 +746,20 @@ function InjuryPool({squad,injuries,onClear,onAdd}){
 
 // ─── Squad Page ───────────────────────────────────────────────────────────────
 function SquadPage({squad,injuries,onSetSquad,onInjure,onClearInjury}){
-  const [showAdd,setShowAdd]=useState(false);
+  const [showAdd,   setShowAdd]   =useState(false);
   const [showImport,setShowImport]=useState(false);
-  const [addName,setAddName]=useState("");
-  const [addPos, setAddPos] =useState(POSITIONS[0]);
-  const [csvText,setCsvText]=useState("");
-  const [csvErr, setCsvErr] =useState("");
+  const [editId,    setEditId]    =useState(null);
+  const [addName,   setAddName]   =useState("");
+  const [addPos,    setAddPos]    =useState(POSITIONS[0]);
+  const [addRole,   setAddRole]   =useState("");
+  const [csvText,   setCsvText]   =useState("");
+  const [csvErr,    setCsvErr]    =useState("");
   const fileRef=useRef();
 
   const addPlayer=()=>{
     if(!addName.trim()) return;
-    onSetSquad([...squad,{id:uid(),name:addName.trim(),pos:addPos}]);
-    setAddName(""); setShowAdd(false);
+    onSetSquad([...squad,{id:uid(),name:addName.trim(),pos:addPos,role:addRole.trim()}]);
+    setAddName(""); setAddRole(""); setShowAdd(false);
   };
   const removePlayer=id=>onSetSquad(squad.filter(p=>p.id!==id));
   const loadDemo=()=>onSetSquad(DEMO_SQUAD.map(p=>({...p,id:uid()})));
@@ -741,6 +769,36 @@ function SquadPage({squad,injuries,onSetSquad,onInjure,onClearInjury}){
     if(!parsed.length){setCsvErr("Could not parse. Ensure file has a 'name' column.");return;}
     onSetSquad(parsed); setCsvText(""); setCsvErr(""); setShowImport(false);
   };
+  const saveEdit=(id,patch)=>onSetSquad(squad.map(p=>p.id===id?{...p,...patch}:p));
+
+  // inline edit state
+  const EditRow=({p})=>{
+    const [name,setName]=useState(p.name);
+    const [pos, setPos] =useState(p.pos||POSITIONS[0]);
+    const [role,setRole]=useState(p.role||"");
+    const save=()=>{saveEdit(p.id,{name:name.trim(),pos,role:role.trim()});setEditId(null);};
+    return(
+      <Card style={{padding:"14px 16px",borderLeft:`4px solid ${C.amber}`,display:"flex",flexDirection:"column",gap:10}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <div><Label>Name</Label>
+            <input value={name} onChange={e=>setName(e.target.value)}
+              style={{width:"100%",background:C.blackLight,border:`1px solid ${C.border}`,color:C.chalk,borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}/>
+          </div>
+          <div><Label>Group</Label>
+            <Sel value={pos} onChange={setPos} style={{width:"100%"}} options={POSITIONS.map(p=>({v:p,l:p}))}/>
+          </div>
+        </div>
+        <div><Label>Specific Role (e.g. Hooker, Openside)</Label>
+          <input value={role} onChange={e=>setRole(e.target.value)} placeholder="Optional detail…"
+            style={{width:"100%",background:C.blackLight,border:`1px solid ${C.border}`,color:C.chalk,borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}/>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <Btn small onClick={save}>Save</Btn>
+          <Btn small variant="ghost" onClick={()=>setEditId(null)}>Cancel</Btn>
+        </div>
+      </Card>
+    );
+  };
 
   return(
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -749,40 +807,41 @@ function SquadPage({squad,injuries,onSetSquad,onInjure,onClearInjury}){
         <Btn variant="ghost" onClick={()=>setShowImport(true)}>↑ Import CSV</Btn>
         <Btn variant="ghost" onClick={loadDemo}>Demo Squad</Btn>
       </div>
-
       <div style={{fontSize:12,color:C.chalkDim}}>{squad.length} players · {Object.keys(injuries).length} injured</div>
-
       {squad.length===0&&<Card style={{padding:"28px 20px",textAlign:"center",color:C.chalkDim}}>No players yet.</Card>}
-
       {[...squad].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>{
+        if(editId===p.id) return <EditRow key={p.id} p={p}/>;
         const inj=injuries[p.id];
         return(
-          <Card key={p.id} style={{padding:"14px 16px",borderLeft:`4px solid ${inj?C.orange:C.chalkFaint}`,display:"flex",alignItems:"center",gap:12}}>
+          <Card key={p.id} style={{padding:"13px 16px",borderLeft:`4px solid ${inj?C.orange:C.chalkFaint}`,display:"flex",alignItems:"center",gap:12}}>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:14,fontWeight:700,color:inj?C.chalkDim:C.chalk}}>{p.name}{inj&&<span style={{fontSize:11,color:C.orange,marginLeft:8}}>🩹 Injured</span>}</div>
-              <div style={{fontSize:12,color:C.chalkDim}}>{p.pos}{inj&&<> · Back {fmtDate(inj.returnDate)}</>}</div>
+              <div style={{fontSize:14,fontWeight:700,color:inj?C.chalkDim:C.chalk}}>
+                {p.name}{inj&&<span style={{fontSize:11,color:C.orange,marginLeft:8}}>🩹 Injured</span>}
+              </div>
+              <div style={{fontSize:12,color:C.chalkDim,marginTop:1}}>
+                {p.pos}{p.role&&<span style={{color:C.amber,marginLeft:6}}>· {p.role}</span>}
+                {inj&&<> · Back {fmtDate(inj.returnDate)}</>}
+              </div>
             </div>
-            <div style={{display:"flex",gap:8,flexShrink:0}}>
+            <div style={{display:"flex",gap:6,flexShrink:0}}>
+              <button onClick={()=>setEditId(p.id)} style={{background:C.blackLight,border:`1px solid ${C.border}`,color:C.chalkDim,borderRadius:8,padding:"6px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>✏️</button>
               {inj
                 ?<button onClick={()=>onClearInjury(p.id)} style={{background:C.green+"22",border:`1px solid ${C.green}44`,color:C.green,borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:800,cursor:"pointer"}}>✓ Fit</button>
-                :<button onClick={()=>onInjure(p)}         style={{background:C.orange+"22",border:`1px solid ${C.orange}44`,color:C.orangeLight,borderRadius:8,padding:"6px 10px",fontSize:11,fontWeight:800,cursor:"pointer"}}>🩹</button>
+                :<button onClick={()=>onInjure(p)} style={{background:C.orange+"22",border:`1px solid ${C.orange}44`,color:C.orangeLight,borderRadius:8,padding:"6px 10px",fontSize:11,fontWeight:800,cursor:"pointer"}}>🩹</button>
               }
               <button onClick={()=>removePlayer(p.id)} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:18,lineHeight:1,opacity:0.5}} onMouseEnter={e=>e.currentTarget.style.opacity=1} onMouseLeave={e=>e.currentTarget.style.opacity=0.5}>✕</button>
             </div>
           </Card>
         );
       })}
-
-      {/* Add player modal */}
       <Modal open={showAdd} onClose={()=>setShowAdd(false)} title="Add Player">
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <div><Label>Full Name</Label><Input value={addName} onChange={setAddName} placeholder="e.g. John Smith"/></div>
-          <div><Label>Position</Label><Sel value={addPos} onChange={setAddPos} style={{width:"100%"}} options={POSITIONS.map(p=>({v:p,l:p}))}/></div>
+          <div><Label>Position Group</Label><Sel value={addPos} onChange={setAddPos} style={{width:"100%"}} options={POSITIONS.map(p=>({v:p,l:p}))}/></div>
+          <div><Label>Specific Role (optional)</Label><Input value={addRole} onChange={setAddRole} placeholder="e.g. Hooker, Openside Flanker"/></div>
           <Btn onClick={addPlayer} disabled={!addName.trim()} full>Add to Squad</Btn>
         </div>
       </Modal>
-
-      {/* Import CSV modal */}
       <Modal open={showImport} onClose={()=>setShowImport(false)} title="Import CSV">
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <div style={{fontSize:12,color:C.chalkDim,lineHeight:1.7}}>
@@ -800,13 +859,14 @@ function SquadPage({squad,injuries,onSetSquad,onInjure,onClearInjury}){
 }
 
 // ─── Matches Page ─────────────────────────────────────────────────────────────
-function MatchesPage({matches,onAdd,onDelete,onSelect}){
-  const [showAdd,setShowAdd]=useState(false);
-  const [homeTeam,setHomeTeam]=useState("Bromley RFC");
-  const [awayTeam,setAwayTeam]=useState("");
-  const [date,    setDate]    =useState(today());
-  const [venue,   setVenue]   =useState("");
-  const [kickoff, setKickoff] =useState("15:00");
+function MatchesPage({matches,onAdd,onDelete,onSelect,onSetResult}){
+  const [showAdd,    setShowAdd]    =useState(false);
+  const [showPast,   setShowPast]   =useState(false);
+  const [homeTeam,   setHomeTeam]   =useState("Bromley RFC");
+  const [awayTeam,   setAwayTeam]   =useState("");
+  const [date,       setDate]       =useState(today());
+  const [venue,      setVenue]      =useState("");
+  const [kickoff,    setKickoff]    =useState("15:00");
 
   const create=()=>{
     if(!homeTeam.trim()||!awayTeam.trim()) return;
@@ -814,26 +874,90 @@ function MatchesPage({matches,onAdd,onDelete,onSelect}){
     setShowAdd(false); setAwayTeam(""); setVenue("");
   };
 
+  const upcoming=[...matches].filter(m=>m.date>=today()).sort((a,b)=>a.date.localeCompare(b.date));
+  const past    =[...matches].filter(m=>m.date< today()).sort((a,b)=>b.date.localeCompare(a.date));
+
+  const RESULTS=[
+    {v:"",     l:"No Result"},
+    {v:"win",  l:"Win"},
+    {v:"loss", l:"Loss"},
+    {v:"draw", l:"Draw"},
+  ];
+  const resultStyle={
+    win: {color:C.green,  bg:C.green+"22",  border:C.green+"44",  label:"W"},
+    loss:{color:C.red,    bg:C.red+"22",    border:C.red+"44",    label:"L"},
+    draw:{color:C.amber,  bg:C.amber+"22",  border:C.amber+"44",  label:"D"},
+  };
+
+  const MatchCard=({m,isPast})=>{
+    const rs=m.result&&resultStyle[m.result];
+    return(
+      <Card style={{padding:"15px 18px",borderLeft:`4px solid ${rs?resultStyle[m.result].color:isPast?C.chalkFaint:C.amber}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:19,fontWeight:800,color:C.chalk}}>
+              {m.homeTeam} <span style={{color:C.amber}}>vs</span> {m.awayTeam}
+            </div>
+            <div style={{fontSize:12,color:C.chalkDim,marginTop:3}}>
+              {fmtDate(m.date)}{m.kickoff&&` · KO ${m.kickoff}`}{m.venue&&` · ${m.venue}`}
+            </div>
+          </div>
+          {rs&&(
+            <div style={{background:rs.bg,border:`1px solid ${rs.border}`,color:rs.color,
+              borderRadius:8,padding:"4px 12px",fontSize:14,fontWeight:900,
+              fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:"0.08em",flexShrink:0}}>
+              {rs.label}
+            </div>
+          )}
+        </div>
+        <div style={{display:"flex",gap:8,marginTop:12,flexWrap:"wrap",alignItems:"center"}}>
+          <Btn small onClick={()=>onSelect(m.id)}>Manage</Btn>
+          {isPast&&(
+            <select value={m.result||""} onChange={e=>onSetResult(m.id,e.target.value)}
+              style={{background:C.blackLight,border:`1px solid ${C.border}`,color:C.chalk,
+                borderRadius:6,padding:"6px 10px",fontSize:12,cursor:"pointer",outline:"none"}}>
+              {RESULTS.map(r=><option key={r.v} value={r.v}>{r.l}</option>)}
+            </select>
+          )}
+          <Btn small variant="danger" onClick={()=>{if(confirm("Delete this match?"))onDelete(m.id);}}>Delete</Btn>
+        </div>
+      </Card>
+    );
+  };
+
   return(
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
       <Btn onClick={()=>setShowAdd(true)} style={{alignSelf:"flex-start"}}>+ New Match</Btn>
 
-      {matches.length===0&&<Card style={{padding:"28px 20px",textAlign:"center",color:C.chalkDim}}>No matches yet.</Card>}
+      {/* Upcoming */}
+      <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:C.amber,
+        letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:800}}>
+        Upcoming ({upcoming.length})
+      </div>
+      {upcoming.length===0&&<Card style={{padding:"20px",textAlign:"center",color:C.chalkDim,fontSize:13}}>No upcoming matches.</Card>}
+      {upcoming.map(m=><MatchCard key={m.id} m={m} isPast={false}/>)}
 
-      {[...matches].sort((a,b)=>a.date.localeCompare(b.date)).map(m=>(
-        <Card key={m.id} style={{padding:"16px 18px",borderLeft:`4px solid ${m.date>=today()?C.amber:C.chalkFaint}`,opacity:m.date<today()?0.6:1}}>
-          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:19,fontWeight:800,color:C.chalk}}>
-            {m.homeTeam} <span style={{color:C.amber}}>vs</span> {m.awayTeam}
-          </div>
-          <div style={{fontSize:12,color:C.chalkDim,marginTop:3}}>
-            {fmtDate(m.date)}{m.kickoff&&` · KO ${m.kickoff}`}{m.venue&&` · ${m.venue}`}
-          </div>
-          <div style={{display:"flex",gap:8,marginTop:12,flexWrap:"wrap"}}>
-            <Btn small onClick={()=>onSelect(m.id)}>Manage</Btn>
-            <Btn small variant="danger" onClick={()=>{if(confirm("Delete this match?"))onDelete(m.id);}}>Delete</Btn>
-          </div>
-        </Card>
-      ))}
+      {/* Past — collapsible */}
+      {past.length>0&&(
+        <>
+          <button onClick={()=>setShowPast(p=>!p)} style={{
+            display:"flex",alignItems:"center",justifyContent:"space-between",
+            background:C.blackLight,border:`1px solid ${C.border}`,
+            borderRadius:10,padding:"12px 16px",cursor:"pointer",width:"100%",
+          }}>
+            <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:C.chalkDim,
+              letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:800}}>
+              Past Matches ({past.length})
+            </span>
+            <span style={{color:C.chalkDim,fontSize:18,lineHeight:1}}>{showPast?"▲":"▼"}</span>
+          </button>
+          {showPast&&(
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {past.map(m=><MatchCard key={m.id} m={m} isPast/>)}
+            </div>
+          )}
+        </>
+      )}
 
       <Modal open={showAdd} onClose={()=>setShowAdd(false)} title="New Match">
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -898,90 +1022,46 @@ function StatsPage({matches,squad,injuries}){
   const [sortBy,setSortBy]=useState("played");
   const [posFilter,setPosFilter]=useState("all");
 
-  // Only count matches that have team data (i.e. historic or current with team builder used)
-  const trackedMatches=matches.filter(m=>m.date<=today());
-  const allMatches=matches; // for availability stats we use all matches with player data
+  const pastMatches=matches.filter(m=>m.date<today());
+  const upcoming=matches.filter(m=>m.date>=today()).sort((a,b)=>a.date.localeCompare(b.date));
+  const nextMatch=upcoming[0];
 
   // ── Per-player stats ──────────────────────────────────────────────────────
   const playerStats=squad.map(p=>{
-    let played=0, available=0, unavailable=0, tentative=0,
-        responded=0, contacted=0, totalAsked=0;
-
-    allMatches.forEach(m=>{
+    let played=0, totalAsked=0;
+    matches.forEach(m=>{
       const mp=(m.players||{})[p.id];
-      if(!mp) return; // never appeared in this match's comms
-      totalAsked++;
-      const av=mp.availability||"unknown";
-      const cm=mp.commStatus||"not_contacted";
-      if(av==="available")   available++;
-      if(av==="unavailable") unavailable++;
-      if(av==="tentative")   tentative++;
-      if(cm!=="not_contacted") contacted++;
-      if(cm==="responded"||av!=="unknown") responded++;
-      // count as played if in team builder starting XV or reservist
+      if(mp) totalAsked++;
       const team=m.team||{};
       if(Object.values(team).includes(p.id)) played++;
     });
-
-    const availRate=totalAsked>0?Math.round((available/totalAsked)*100):null;
-    const respRate =totalAsked>0?Math.round((responded/totalAsked)*100):null;
-
-    return{...p,played,available,unavailable,tentative,responded,contacted,
-      totalAsked,availRate,respRate};
+    return{...p,played,totalAsked};
   });
 
-  // ── Position coverage ──────────────────────────────────────────────────────
-  const posCoverage={};
-  squad.forEach(p=>{
-    if(!posCoverage[p.pos]) posCoverage[p.pos]={pos:p.pos,total:0,available:0};
-    posCoverage[p.pos].total++;
-  });
-  // factor in current injuries
-  Object.keys(injuries).forEach(id=>{
-    const p=squad.find(s=>s.id===id);
-    if(p&&posCoverage[p.pos]) posCoverage[p.pos].available=Math.max(0,(posCoverage[p.pos].available||0));
-  });
-  const posData=Object.values(posCoverage).sort((a,b)=>b.total-a.total);
+  // ── Never played ──────────────────────────────────────────────────────────
+  const neverPlayed=playerStats.filter(p=>p.played===0&&p.totalAsked>0);
+  const neverAsked =playerStats.filter(p=>p.totalAsked===0);
 
-  // ── Match-by-match availability ────────────────────────────────────────────
-  const matchData=[...allMatches]
-    .sort((a,b)=>a.date.localeCompare(b.date))
-    .map(m=>{
-      const active=squad.filter(p=>!injuries[p.id]);
-      const contacted=active.filter(p=>{const mp=(m.players||{})[p.id]; return mp&&mp.commStatus!=="not_contacted";});
-      const avail=active.filter(p=>{const mp=(m.players||{})[p.id]; return mp&&mp.availability==="available";});
-      return{
-        label:`${m.homeTeam.replace("Bromley RFC","BRFC").replace("Bromley","BRFC")} vs ${m.awayTeam}`.slice(0,14),
-        value:avail.length,
-        contacted:contacted.length,
-        date:m.date,
-      };
-    });
+  // ── Win/loss record ───────────────────────────────────────────────────────
+  const wins  =pastMatches.filter(m=>m.result==="win").length;
+  const losses=pastMatches.filter(m=>m.result==="loss").length;
+  const draws =pastMatches.filter(m=>m.result==="draw").length;
 
-  // ── Club summary cards ─────────────────────────────────────────────────────
-  const totalMatches=allMatches.length;
-  const avgAvail=matchData.length>0
-    ?Math.round(matchData.reduce((s,m)=>s+m.value,0)/matchData.length)
-    :0;
-  const mostReliable=[...playerStats]
-    .filter(p=>p.totalAsked>=2)
-    .sort((a,b)=>(b.availRate||0)-(a.availRate||0))
-    .slice(0,3);
-  const leastResponsive=[...playerStats]
-    .filter(p=>p.totalAsked>=2)
-    .sort((a,b)=>(a.respRate||0)-(b.respRate||0))
-    .slice(0,3);
+  // ── Next match availability ───────────────────────────────────────────────
+  const nextAvail=nextMatch
+    ?squad.filter(p=>!injuries[p.id]&&(nextMatch.players||{})[p.id]?.availability==="available").length
+    :null;
+  const nextNotContacted=nextMatch
+    ?squad.filter(p=>!injuries[p.id]&&!(nextMatch.players||{})[p.id]?.commStatus||(nextMatch.players||{})[p.id]?.commStatus==="not_contacted").length
+    :null;
 
-  // ── Filtered + sorted player table ────────────────────────────────────────
+  // ── Filtered sorted player table ──────────────────────────────────────────
   const positions=[...new Set(squad.map(p=>p.pos))].sort();
-  const filtered=playerStats
+  const filtered=[...playerStats]
     .filter(p=>posFilter==="all"||p.pos===posFilter)
-    .filter(p=>p.totalAsked>0)
     .sort((a,b)=>{
-      if(sortBy==="played")    return b.played-a.played;
-      if(sortBy==="available") return (b.availRate||0)-(a.availRate||0);
-      if(sortBy==="response")  return (b.respRate||0)-(a.respRate||0);
-      if(sortBy==="name")      return a.name.localeCompare(b.name);
+      if(sortBy==="played") return b.played-a.played;
+      if(sortBy==="name")   return a.name.localeCompare(b.name);
       return 0;
     });
 
@@ -993,19 +1073,7 @@ function StatsPage({matches,squad,injuries}){
     </Card>
   );
 
-  const RateBar=({value,color})=>{
-    if(value===null) return <span style={{color:C.chalkDim,fontSize:11}}>—</span>;
-    return(
-      <div style={{display:"flex",alignItems:"center",gap:6}}>
-        <div style={{width:60,height:6,background:C.blackLight,borderRadius:99,overflow:"hidden"}}>
-          <div style={{width:`${value}%`,height:"100%",background:color,borderRadius:99}}/>
-        </div>
-        <span style={{fontSize:12,fontWeight:700,color}}>{value}%</span>
-      </div>
-    );
-  };
-
-  const noData=allMatches.length===0||playerStats.every(p=>p.totalAsked===0);
+  const noData=pastMatches.length===0&&playerStats.every(p=>p.totalAsked===0);
 
   return(
     <div style={{display:"flex",flexDirection:"column",gap:20}}>
@@ -1017,77 +1085,67 @@ function StatsPage({matches,squad,injuries}){
             No stats yet
           </div>
           <div style={{fontSize:13,lineHeight:1.6}}>
-            Stats appear once you've used the Comms Tracker or Team Builder on at least one match.<br/>
-            Historic matches can be added in the Matches tab.
+            Stats appear once you have past matches and have used the Comms Tracker or Team Builder.
           </div>
         </Card>
       )}
 
       {!noData&&(
         <>
-          {/* ── Club summary ── */}
+          {/* ── Season overview ── */}
           <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:C.amber,
             letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:800}}>Season Overview</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
-            <SummaryCard label="Matches Tracked" value={totalMatches} color={C.amber}/>
-            <SummaryCard label="Avg Available" value={avgAvail} color={C.green} sub="players per match"/>
+            <SummaryCard label="Matches Played" value={pastMatches.length} color={C.amber}/>
             <SummaryCard label="Squad Size" value={squad.length} color={C.blue}
               sub={`${Object.keys(injuries).length} injured`}/>
+            {pastMatches.some(m=>m.result)
+              ?<Card style={{padding:"16px 18px",borderBottom:`3px solid ${C.green}`}}>
+                <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:4}}>
+                  <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:28,fontWeight:900,color:C.green}}>{wins}</span>
+                  <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:28,fontWeight:900,color:C.amber}}>{draws}</span>
+                  <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:28,fontWeight:900,color:C.red}}>{losses}</span>
+                </div>
+                <div style={{fontSize:10,color:C.chalkDim,textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:700}}>W · D · L</div>
+              </Card>
+              :<SummaryCard label="Results" value="—" color={C.chalkDim} sub="Add results in Matches tab"/>
+            }
           </div>
 
-          {/* ── Most reliable ── */}
-          {mostReliable.length>0&&(
+          {/* ── Next match availability ── */}
+          {nextMatch&&(
             <>
               <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:C.amber,
-                letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:800}}>Most Reliable</div>
-              <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {mostReliable.map((p,i)=>(
-                  <Card key={p.id} style={{padding:"12px 16px",display:"flex",alignItems:"center",gap:12,
-                    borderLeft:`4px solid ${i===0?C.amber:i===1?C.chalkDim:C.orange}`}}>
-                    <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:900,
-                      color:i===0?C.amber:C.chalkDim,width:24,textAlign:"center"}}>{i+1}</div>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:14,fontWeight:700,color:C.chalk}}>{p.name}</div>
-                      <div style={{fontSize:11,color:C.chalkDim}}>{p.pos}</div>
-                    </div>
-                    <div style={{textAlign:"right"}}>
-                      <div style={{fontSize:18,fontWeight:800,color:C.green}}>{p.availRate}%</div>
-                      <div style={{fontSize:10,color:C.chalkDim}}>available</div>
-                    </div>
-                  </Card>
-                ))}
+                letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:800}}>
+                Next Match — {nextMatch.homeTeam} vs {nextMatch.awayTeam}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <SummaryCard label="Confirmed Available" value={nextAvail??0} color={C.green}/>
+                <SummaryCard label="Yet to Contact" value={nextNotContacted??0} color={C.chalkDim}/>
               </div>
             </>
           )}
 
-          {/* ── Match availability chart ── */}
-          {matchData.length>0&&(
+          {/* ── Never played ── */}
+          {neverPlayed.length>0&&(
             <>
-              <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:C.amber,
+              <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:C.red,
                 letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:800}}>
-                Available Players Per Match
+                0 Games Played ({neverPlayed.length})
               </div>
-              <Card style={{padding:"16px 14px"}}>
-                <BarChart data={matchData} color={C.green} height={140}/>
-                <div style={{fontSize:10,color:C.chalkDim,textAlign:"center",marginTop:8}}>
-                  Green bars = confirmed available players
-                </div>
+              <Card style={{padding:"12px 14px",display:"flex",flexWrap:"wrap",gap:8}}>
+                {[...neverPlayed].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>(
+                  <div key={p.id} style={{background:C.red+"18",border:`1px solid ${C.red}44`,
+                    borderRadius:8,padding:"6px 12px",fontSize:12}}>
+                    <span style={{color:C.chalk,fontWeight:700}}>{p.name}</span>
+                    <span style={{color:C.chalkDim,fontSize:10,marginLeft:6}}>{p.pos}</span>
+                  </div>
+                ))}
               </Card>
             </>
           )}
 
-          {/* ── Position coverage ── */}
-          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:C.amber,
-            letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:800}}>Position Coverage</div>
-          <Card style={{padding:"16px 14px"}}>
-            <BarChart data={posData.map(p=>({label:p.pos.replace(" Flanker","").replace("Tighthead ","TH ").replace("Loosehead ","LH ").replace("Openside","OS").replace("Blindside","BS"),value:p.total}))}
-              color={C.amber} height={140}/>
-            <div style={{fontSize:10,color:C.chalkDim,textAlign:"center",marginTop:8}}>
-              Total players per position in roster
-            </div>
-          </Card>
-
-          {/* ── Player reliability table ── */}
+          {/* ── Player stats table ── */}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
             <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:C.amber,
               letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:800}}>Player Stats</div>
@@ -1102,57 +1160,45 @@ function StatsPage({matches,squad,injuries}){
                 style={{background:C.blackLight,border:`1px solid ${C.border}`,color:C.chalk,
                   borderRadius:6,padding:"6px 10px",fontSize:12,cursor:"pointer",outline:"none"}}>
                 <option value="played">Sort: Games Played</option>
-                <option value="available">Sort: Availability %</option>
-                <option value="response">Sort: Response %</option>
-                <option value="name">Sort: Name</option>
+                <option value="name">Sort: Name A–Z</option>
               </select>
             </div>
           </div>
 
-          {filtered.length===0&&(
-            <Card style={{padding:"20px",textAlign:"center",color:C.chalkDim,fontSize:13}}>
-              No player data for selected filters yet.
-            </Card>
-          )}
-
-          {filtered.length>0&&(
-            <Card style={{overflow:"hidden"}}>
-              {/* Table header */}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 52px 52px 90px 90px",
-                gap:8,padding:"8px 14px",background:C.blackLight,
-                borderBottom:`1px solid ${C.border}`}}>
-                {["Player","Played","Asked","Available","Response"].map((h,i)=>(
-                  <div key={h} style={{fontSize:9,color:C.amber,fontWeight:800,
-                    letterSpacing:"0.1em",textTransform:"uppercase",
-                    textAlign:i>0?"center":"left"}}>{h}</div>
-                ))}
-              </div>
-              {filtered.map((p,i)=>(
-                <div key={p.id} style={{display:"grid",gridTemplateColumns:"1fr 52px 52px 90px 90px",
-                  gap:8,padding:"10px 14px",
-                  borderBottom:i<filtered.length-1?`1px solid ${C.chalkFaint}`:"none",
-                  transition:"background 0.1s"}}
-                  onMouseEnter={e=>e.currentTarget.style.background=C.blackLight}
-                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}
-                >
-                  <div>
-                    <div style={{fontSize:13,fontWeight:600,color:C.chalk}}>{p.name}</div>
-                    <div style={{fontSize:10,color:C.chalkDim}}>{p.pos}</div>
-                  </div>
-                  <div style={{textAlign:"center",fontSize:15,fontWeight:800,
-                    color:p.played>0?C.amber:C.chalkDim,alignSelf:"center"}}>{p.played}</div>
-                  <div style={{textAlign:"center",fontSize:13,color:C.chalkDim,alignSelf:"center"}}>{p.totalAsked}</div>
-                  <div style={{alignSelf:"center"}}><RateBar value={p.availRate} color={C.green}/></div>
-                  <div style={{alignSelf:"center"}}><RateBar value={p.respRate}  color={C.blue}/></div>
-                </div>
+          <Card style={{overflow:"hidden"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 80px",gap:8,
+              padding:"8px 14px",background:C.blackLight,borderBottom:`1px solid ${C.border}`}}>
+              {["Player","Played"].map((h,i)=>(
+                <div key={h} style={{fontSize:9,color:C.amber,fontWeight:800,
+                  letterSpacing:"0.1em",textTransform:"uppercase",
+                  textAlign:i>0?"center":"left"}}>{h}</div>
               ))}
-            </Card>
-          )}
+            </div>
+            {filtered.length===0&&(
+              <div style={{padding:"20px",textAlign:"center",color:C.chalkDim,fontSize:13}}>No data yet.</div>
+            )}
+            {filtered.map((p,i)=>(
+              <div key={p.id} style={{display:"grid",gridTemplateColumns:"1fr 80px",gap:8,
+                padding:"10px 14px",borderBottom:i<filtered.length-1?`1px solid ${C.chalkFaint}`:"none",
+                transition:"background 0.1s"}}
+                onMouseEnter={e=>e.currentTarget.style.background=C.blackLight}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+              >
+                <div>
+                  <div style={{fontSize:13,fontWeight:600,color:p.played===0?C.chalkDim:C.chalk}}>{p.name}</div>
+                  <div style={{fontSize:10,color:C.chalkDim}}>{p.pos}{p.role&&` · ${p.role}`}</div>
+                </div>
+                <div style={{textAlign:"center",fontSize:16,fontWeight:800,
+                  color:p.played>0?C.amber:C.chalkDim,alignSelf:"center"}}>{p.played}</div>
+              </div>
+            ))}
+          </Card>
         </>
       )}
     </div>
   );
 }
+
 
 // ─── App Root ─────────────────────────────────────────────────────────────────
 export default function App(){
@@ -1196,6 +1242,11 @@ export default function App(){
 
   const updateTeam=(matchId,team)=>{
     const updated=matches.map(m=>m.id===matchId?{...m,team}:m);
+    saveMatches(updated);
+  };
+
+  const setResult=(matchId,result)=>{
+    const updated=matches.map(m=>m.id===matchId?{...m,result}:m);
     saveMatches(updated);
   };
 
@@ -1277,7 +1328,7 @@ export default function App(){
 
         {tab==="dashboard"&&<Dashboard matches={matches} squad={squad} injuries={injuries} onGo={goTo}/>}
         {tab==="squad"    &&<SquadPage squad={squad} injuries={injuries} onSetSquad={saveSquad} onInjure={p=>setInjureTarget(p)} onClearInjury={clearInjury}/>}
-        {tab==="matches"&&!isMatchView&&<MatchesPage matches={matches} onAdd={addMatch} onDelete={deleteMatch} onSelect={id=>setMatchId(id)}/>}
+        {tab==="matches"&&!isMatchView&&<MatchesPage matches={matches} onAdd={addMatch} onDelete={deleteMatch} onSelect={id=>setMatchId(id)} onSetResult={setResult}/>}
         {isMatchView&&<MatchView match={selectedMatch} squad={squad} injuries={injuries} onUpdate={updatePlayer} onInjure={p=>setInjureTarget(p)} onUpdateTeam={updateTeam} onBack={()=>setMatchId(null)}/>}
         {tab==="injuries"&&<InjuryPool squad={squad} injuries={injuries} onClear={clearInjury} onAdd={addInjury}/>}
         {tab==="stats"&&<StatsPage matches={matches} squad={squad} injuries={injuries}/>}
