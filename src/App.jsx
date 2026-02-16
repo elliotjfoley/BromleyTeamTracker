@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, onValue, set, update } from "firebase/database";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, 
+         signOut, onAuthStateChanged, sendPasswordResetEmail } from "firebase/auth";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 🔥 VERIFIED FIREBASE CONFIG
@@ -17,7 +19,8 @@ const FIREBASE_CONFIG = {
 };
 
 const firebaseApp = initializeApp(FIREBASE_CONFIG);
-const db          = getDatabase(firebaseApp);
+const db   = getDatabase(firebaseApp);
+const auth = getAuth(firebaseApp);
 
 const dbSet    = (path, val) => set(ref(db, path), val);
 const dbUpdate = (path, val) => update(ref(db, path), val);
@@ -1200,8 +1203,150 @@ function StatsPage({matches,squad,injuries}){
 }
 
 
+
+// ─── Auth Screen ──────────────────────────────────────────────────────────────
+function AuthScreen(){
+  const [mode,setMode]=useState("login");
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [error,setError]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [resetSent,setResetSent]=useState(false);
+
+  const handleAuth=async()=>{
+    if(!email.trim()||!password.trim()){setError("Email and password required");return;}
+    setError(""); setLoading(true);
+    try{
+      if(mode==="login"){
+        await signInWithEmailAndPassword(auth,email.trim(),password);
+      }else{
+        await createUserWithEmailAndPassword(auth,email.trim(),password);
+      }
+    }catch(e){
+      if(e.code==="auth/email-already-in-use") setError("Email already registered — try logging in");
+      else if(e.code==="auth/invalid-email") setError("Invalid email address");
+      else if(e.code==="auth/weak-password") setError("Password must be at least 6 characters");
+      else if(e.code==="auth/user-not-found"||e.code==="auth/wrong-password") setError("Invalid email or password");
+      else if(e.code==="auth/invalid-credential") setError("Invalid email or password");
+      else setError(e.message);
+    }
+    setLoading(false);
+  };
+
+  const handleReset=async()=>{
+    if(!email.trim()){setError("Enter your email first");return;}
+    setError(""); setLoading(true);
+    try{
+      await sendPasswordResetEmail(auth,email.trim());
+      setResetSent(true);
+    }catch(e){
+      setError("Failed to send reset email — check the address is correct");
+    }
+    setLoading(false);
+  };
+
+  return(
+    <div style={{minHeight:"100vh",background:C.black,display:"flex",alignItems:"center",
+      justifyContent:"center",padding:"20px",position:"relative"}}>
+      {/* Texture */}
+      <div style={{position:"absolute",inset:0,opacity:0.022,
+        backgroundImage:`repeating-linear-gradient(-45deg,${C.amber} 0,${C.amber} 1px,transparent 0,transparent 50%)`,
+        backgroundSize:"14px 14px"}}/>
+      
+      <Card style={{padding:"32px 28px",maxWidth:420,width:"100%",position:"relative",zIndex:1,
+        borderTop:`4px solid ${C.amber}`,boxShadow:`0 8px 40px rgba(0,0,0,0.6)`}}>
+        {/* Logo + Title */}
+        <div style={{textAlign:"center",marginBottom:28}}>
+          <img src={LOGO} alt="Bromley RFC" style={{width:56,height:56,objectFit:"contain",
+            filter:"drop-shadow(0 0 12px #f5a80066)",marginBottom:12}}/>
+          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:28,fontWeight:900,
+            color:C.chalk,letterSpacing:"0.06em",textTransform:"uppercase"}}>Bromley RFC</div>
+          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:11,
+            letterSpacing:"0.18em",color:C.amber,textTransform:"uppercase"}}>Squad Tracker</div>
+        </div>
+
+        {resetSent?(
+          <div style={{textAlign:"center",padding:"20px 0"}}>
+            <div style={{fontSize:40,marginBottom:12}}>✉️</div>
+            <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:20,fontWeight:800,
+              color:C.chalk,marginBottom:8}}>Check Your Email</div>
+            <div style={{fontSize:13,color:C.chalkDim,lineHeight:1.6,marginBottom:20}}>
+              Password reset link sent to <strong style={{color:C.chalk}}>{email}</strong>
+            </div>
+            <button onClick={()=>{setResetSent(false);setMode("login");}}
+              style={{background:C.amber,border:"none",color:C.black,borderRadius:8,
+                padding:"10px 24px",fontSize:13,fontWeight:800,cursor:"pointer",
+                letterSpacing:"0.05em",textTransform:"uppercase"}}>
+              Back to Login
+            </button>
+          </div>
+        ):(
+          <>
+            {/* Tab switcher */}
+            <div style={{display:"flex",background:C.blackLight,borderRadius:10,padding:4,gap:4,
+              marginBottom:20,border:`1px solid ${C.border}`}}>
+              {["login","signup"].map(m=>(
+                <button key={m} onClick={()=>{setMode(m);setError("");}}
+                  style={{flex:1,padding:"10px",borderRadius:8,border:"none",cursor:"pointer",
+                    fontWeight:800,fontSize:13,letterSpacing:"0.04em",textTransform:"uppercase",
+                    transition:"all 0.15s",background:mode===m?C.amber:"transparent",
+                    color:mode===m?C.black:C.chalkDim}}>
+                  {m==="login"?"Log In":"Sign Up"}
+                </button>
+              ))}
+            </div>
+
+            {/* Form */}
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              <div>
+                <Label>Email</Label>
+                <input value={email} onChange={e=>setEmail(e.target.value)}
+                  onKeyDown={e=>{if(e.key==="Enter")handleAuth();}}
+                  type="email" placeholder="your.email@example.com" autoComplete="email"
+                  style={{width:"100%",background:C.blackLight,border:`1px solid ${C.border}`,
+                    color:C.chalk,borderRadius:8,padding:"11px 14px",fontSize:14,outline:"none"}}/>
+              </div>
+              <div>
+                <Label>Password</Label>
+                <input value={password} onChange={e=>setPassword(e.target.value)}
+                  onKeyDown={e=>{if(e.key==="Enter")handleAuth();}}
+                  type="password" placeholder={mode==="signup"?"Min 6 characters":"••••••••"}
+                  autoComplete={mode==="login"?"current-password":"new-password"}
+                  style={{width:"100%",background:C.blackLight,border:`1px solid ${C.border}`,
+                    color:C.chalk,borderRadius:8,padding:"11px 14px",fontSize:14,outline:"none"}}/>
+              </div>
+
+              {error&&(
+                <div style={{background:C.red+"22",border:`1px solid ${C.red}44`,
+                  borderRadius:8,padding:"10px 14px",fontSize:12,color:C.redLight}}>
+                  {error}
+                </div>
+              )}
+
+              <button onClick={handleAuth} disabled={loading}
+                style={{width:"100%",background:C.amber,border:"none",color:C.black,
+                  borderRadius:8,padding:"12px",fontSize:14,fontWeight:800,cursor:loading?"wait":"pointer",
+                  letterSpacing:"0.05em",textTransform:"uppercase",opacity:loading?0.5:1}}>
+                {loading?"Please wait...":(mode==="login"?"Log In":"Create Account")}
+              </button>
+
+              {mode==="login"&&(
+                <button onClick={handleReset}
+                  style={{background:"none",border:"none",color:C.chalkDim,fontSize:12,
+                    cursor:"pointer",textAlign:"center",textDecoration:"underline"}}>
+                  Forgot password?
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 // ─── App Root ─────────────────────────────────────────────────────────────────
-export default function App(){
+function AppContent(){
   const [tab,    setTab]    =useState("dashboard");
   const [matchId,setMatchId]=useState(null);
   const [squad,  setSquadS] =useState([]);
@@ -1306,10 +1451,20 @@ export default function App(){
             </nav>
           )}
 
-          {/* Connection dot */}
-          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>
-            <div style={{width:8,height:8,borderRadius:"50%",background:online?C.green:C.red,boxShadow:`0 0 6px ${online?C.green:C.red}`}}/>
-            {!isMobile&&<span style={{fontSize:11,color:C.chalkDim}}>{online?"Live":"Offline"}</span>}
+          {/* Connection dot + logout */}
+          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:10}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:online?C.green:C.red,boxShadow:`0 0 6px ${online?C.green:C.red}`}}/>
+              {!isMobile&&<span style={{fontSize:11,color:C.chalkDim}}>{online?"Live":"Offline"}</span>}
+            </div>
+            {!isMobile&&(
+              <button onClick={()=>signOut(auth)}
+                style={{background:"none",border:`1px solid ${C.border}`,color:C.chalkDim,
+                  borderRadius:6,padding:"4px 12px",fontSize:11,fontWeight:700,cursor:"pointer",
+                  letterSpacing:"0.05em",textTransform:"uppercase"}}>
+                Logout
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -1344,6 +1499,10 @@ export default function App(){
               {tab===t.id&&<div style={{width:20,height:2,background:C.amber,borderRadius:99}}/>}
             </button>
           ))}
+          <button onClick={()=>signOut(auth)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"none",border:"none",cursor:"pointer",color:C.chalkDim,transition:"color 0.15s",padding:"8px 0"}}>
+            <span style={{fontSize:20,lineHeight:1}}>🚪</span>
+            <span style={{fontSize:10,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase"}}>Logout</span>
+          </button>
         </nav>
       )}
 
@@ -1356,4 +1515,31 @@ export default function App(){
       />
     </div>
   );
-}
+
+
+// ─── Auth Wrapper ─────────────────────────────────────────────────────────────
+export default function App(){
+  const [user,setUser]=useState(null);
+  const [authLoading,setAuthLoading]=useState(true);
+
+  useEffect(()=>{
+    const unsub=onAuthStateChanged(auth,u=>{
+      setUser(u);
+      setAuthLoading(false);
+    });
+    return ()=>unsub();
+  },[]);
+
+  if(authLoading){
+    return(
+      <div style={{minHeight:"100vh",background:C.black,display:"flex",alignItems:"center",
+        justifyContent:"center"}}>
+        <img src={LOGO} alt="Bromley RFC" style={{width:64,height:64,objectFit:"contain",
+          filter:"drop-shadow(0 0 12px #f5a80066)"}}/>
+      </div>
+    );
+  }
+
+  if(!user) return <AuthScreen/>;
+  return <AppContent/>;
+}}
