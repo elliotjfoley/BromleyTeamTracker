@@ -868,6 +868,292 @@ function InjureModal({player,open,onClose,onConfirm}){
   );
 }
 
+
+// ─── Simple Bar Chart ─────────────────────────────────────────────────────────
+function BarChart({data,color=C.amber,maxVal,height=160,labelKey="label",valueKey="value"}){
+  const max=maxVal||Math.max(...data.map(d=>d[valueKey]),1);
+  return(
+    <div style={{display:"flex",alignItems:"flex-end",gap:6,height,paddingTop:8}}>
+      {data.map((d,i)=>{
+        const pct=max>0?(d[valueKey]/max)*100:0;
+        return(
+          <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4,height:"100%",justifyContent:"flex-end"}}>
+            <div style={{fontSize:10,color:C.chalk,fontWeight:700}}>{d[valueKey]||""}</div>
+            <div style={{width:"100%",background:color,borderRadius:"4px 4px 0 0",
+              height:`${pct}%`,minHeight:pct>0?4:0,transition:"height 0.4s ease",
+              opacity:0.85+0.15*(pct/100)}}/>
+            <div style={{fontSize:9,color:C.chalkDim,textAlign:"center",lineHeight:1.2,
+              overflow:"hidden",textOverflow:"ellipsis",width:"100%",whiteSpace:"nowrap"}}>
+              {d[labelKey]}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Stats Page ───────────────────────────────────────────────────────────────
+function StatsPage({matches,squad,injuries}){
+  const [sortBy,setSortBy]=useState("played");
+  const [posFilter,setPosFilter]=useState("all");
+
+  // Only count matches that have team data (i.e. historic or current with team builder used)
+  const trackedMatches=matches.filter(m=>m.date<=today());
+  const allMatches=matches; // for availability stats we use all matches with player data
+
+  // ── Per-player stats ──────────────────────────────────────────────────────
+  const playerStats=squad.map(p=>{
+    let played=0, available=0, unavailable=0, tentative=0,
+        responded=0, contacted=0, totalAsked=0;
+
+    allMatches.forEach(m=>{
+      const mp=(m.players||{})[p.id];
+      if(!mp) return; // never appeared in this match's comms
+      totalAsked++;
+      const av=mp.availability||"unknown";
+      const cm=mp.commStatus||"not_contacted";
+      if(av==="available")   available++;
+      if(av==="unavailable") unavailable++;
+      if(av==="tentative")   tentative++;
+      if(cm!=="not_contacted") contacted++;
+      if(cm==="responded"||av!=="unknown") responded++;
+      // count as played if in team builder starting XV or reservist
+      const team=m.team||{};
+      if(Object.values(team).includes(p.id)) played++;
+    });
+
+    const availRate=totalAsked>0?Math.round((available/totalAsked)*100):null;
+    const respRate =totalAsked>0?Math.round((responded/totalAsked)*100):null;
+
+    return{...p,played,available,unavailable,tentative,responded,contacted,
+      totalAsked,availRate,respRate};
+  });
+
+  // ── Position coverage ──────────────────────────────────────────────────────
+  const posCoverage={};
+  squad.forEach(p=>{
+    if(!posCoverage[p.pos]) posCoverage[p.pos]={pos:p.pos,total:0,available:0};
+    posCoverage[p.pos].total++;
+  });
+  // factor in current injuries
+  Object.keys(injuries).forEach(id=>{
+    const p=squad.find(s=>s.id===id);
+    if(p&&posCoverage[p.pos]) posCoverage[p.pos].available=Math.max(0,(posCoverage[p.pos].available||0));
+  });
+  const posData=Object.values(posCoverage).sort((a,b)=>b.total-a.total);
+
+  // ── Match-by-match availability ────────────────────────────────────────────
+  const matchData=[...allMatches]
+    .sort((a,b)=>a.date.localeCompare(b.date))
+    .map(m=>{
+      const active=squad.filter(p=>!injuries[p.id]);
+      const contacted=active.filter(p=>{const mp=(m.players||{})[p.id]; return mp&&mp.commStatus!=="not_contacted";});
+      const avail=active.filter(p=>{const mp=(m.players||{})[p.id]; return mp&&mp.availability==="available";});
+      return{
+        label:`${m.homeTeam.replace("Bromley RFC","BRFC").replace("Bromley","BRFC")} vs ${m.awayTeam}`.slice(0,14),
+        value:avail.length,
+        contacted:contacted.length,
+        date:m.date,
+      };
+    });
+
+  // ── Club summary cards ─────────────────────────────────────────────────────
+  const totalMatches=allMatches.length;
+  const avgAvail=matchData.length>0
+    ?Math.round(matchData.reduce((s,m)=>s+m.value,0)/matchData.length)
+    :0;
+  const mostReliable=[...playerStats]
+    .filter(p=>p.totalAsked>=2)
+    .sort((a,b)=>(b.availRate||0)-(a.availRate||0))
+    .slice(0,3);
+  const leastResponsive=[...playerStats]
+    .filter(p=>p.totalAsked>=2)
+    .sort((a,b)=>(a.respRate||0)-(b.respRate||0))
+    .slice(0,3);
+
+  // ── Filtered + sorted player table ────────────────────────────────────────
+  const positions=[...new Set(squad.map(p=>p.pos))].sort();
+  const filtered=playerStats
+    .filter(p=>posFilter==="all"||p.pos===posFilter)
+    .filter(p=>p.totalAsked>0)
+    .sort((a,b)=>{
+      if(sortBy==="played")    return b.played-a.played;
+      if(sortBy==="available") return (b.availRate||0)-(a.availRate||0);
+      if(sortBy==="response")  return (b.respRate||0)-(a.respRate||0);
+      if(sortBy==="name")      return a.name.localeCompare(b.name);
+      return 0;
+    });
+
+  const SummaryCard=({label,value,color=C.amber,sub})=>(
+    <Card style={{padding:"16px 18px",borderBottom:`3px solid ${color}`}}>
+      <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:38,fontWeight:900,color,lineHeight:1}}>{value}</div>
+      <div style={{fontSize:10,color:C.chalkDim,textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:700,marginTop:4}}>{label}</div>
+      {sub&&<div style={{fontSize:11,color:C.chalkDim,marginTop:3}}>{sub}</div>}
+    </Card>
+  );
+
+  const RateBar=({value,color})=>{
+    if(value===null) return <span style={{color:C.chalkDim,fontSize:11}}>—</span>;
+    return(
+      <div style={{display:"flex",alignItems:"center",gap:6}}>
+        <div style={{width:60,height:6,background:C.blackLight,borderRadius:99,overflow:"hidden"}}>
+          <div style={{width:`${value}%`,height:"100%",background:color,borderRadius:99}}/>
+        </div>
+        <span style={{fontSize:12,fontWeight:700,color}}>{value}%</span>
+      </div>
+    );
+  };
+
+  const noData=allMatches.length===0||playerStats.every(p=>p.totalAsked===0);
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:20}}>
+
+      {noData&&(
+        <Card style={{padding:"32px 20px",textAlign:"center",color:C.chalkDim}}>
+          <div style={{fontSize:32,marginBottom:8}}>📊</div>
+          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:20,fontWeight:800,color:C.chalk,marginBottom:8}}>
+            No stats yet
+          </div>
+          <div style={{fontSize:13,lineHeight:1.6}}>
+            Stats appear once you've used the Comms Tracker or Team Builder on at least one match.<br/>
+            Historic matches can be added in the Matches tab.
+          </div>
+        </Card>
+      )}
+
+      {!noData&&(
+        <>
+          {/* ── Club summary ── */}
+          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:C.amber,
+            letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:800}}>Season Overview</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+            <SummaryCard label="Matches Tracked" value={totalMatches} color={C.amber}/>
+            <SummaryCard label="Avg Available" value={avgAvail} color={C.green} sub="players per match"/>
+            <SummaryCard label="Squad Size" value={squad.length} color={C.blue}
+              sub={`${Object.keys(injuries).length} injured`}/>
+          </div>
+
+          {/* ── Most reliable ── */}
+          {mostReliable.length>0&&(
+            <>
+              <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:C.amber,
+                letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:800}}>Most Reliable</div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {mostReliable.map((p,i)=>(
+                  <Card key={p.id} style={{padding:"12px 16px",display:"flex",alignItems:"center",gap:12,
+                    borderLeft:`4px solid ${i===0?C.amber:i===1?C.chalkDim:C.orange}`}}>
+                    <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:900,
+                      color:i===0?C.amber:C.chalkDim,width:24,textAlign:"center"}}>{i+1}</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:14,fontWeight:700,color:C.chalk}}>{p.name}</div>
+                      <div style={{fontSize:11,color:C.chalkDim}}>{p.pos}</div>
+                    </div>
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:18,fontWeight:800,color:C.green}}>{p.availRate}%</div>
+                      <div style={{fontSize:10,color:C.chalkDim}}>available</div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* ── Match availability chart ── */}
+          {matchData.length>0&&(
+            <>
+              <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:C.amber,
+                letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:800}}>
+                Available Players Per Match
+              </div>
+              <Card style={{padding:"16px 14px"}}>
+                <BarChart data={matchData} color={C.green} height={140}/>
+                <div style={{fontSize:10,color:C.chalkDim,textAlign:"center",marginTop:8}}>
+                  Green bars = confirmed available players
+                </div>
+              </Card>
+            </>
+          )}
+
+          {/* ── Position coverage ── */}
+          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:C.amber,
+            letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:800}}>Position Coverage</div>
+          <Card style={{padding:"16px 14px"}}>
+            <BarChart data={posData.map(p=>({label:p.pos.replace(" Flanker","").replace("Tighthead ","TH ").replace("Loosehead ","LH ").replace("Openside","OS").replace("Blindside","BS"),value:p.total}))}
+              color={C.amber} height={140}/>
+            <div style={{fontSize:10,color:C.chalkDim,textAlign:"center",marginTop:8}}>
+              Total players per position in roster
+            </div>
+          </Card>
+
+          {/* ── Player reliability table ── */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+            <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:C.amber,
+              letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:800}}>Player Stats</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <select value={posFilter} onChange={e=>setPosFilter(e.target.value)}
+                style={{background:C.blackLight,border:`1px solid ${C.border}`,color:C.chalk,
+                  borderRadius:6,padding:"6px 10px",fontSize:12,cursor:"pointer",outline:"none"}}>
+                <option value="all">All Positions</option>
+                {positions.map(p=><option key={p} value={p}>{p}</option>)}
+              </select>
+              <select value={sortBy} onChange={e=>setSortBy(e.target.value)}
+                style={{background:C.blackLight,border:`1px solid ${C.border}`,color:C.chalk,
+                  borderRadius:6,padding:"6px 10px",fontSize:12,cursor:"pointer",outline:"none"}}>
+                <option value="played">Sort: Games Played</option>
+                <option value="available">Sort: Availability %</option>
+                <option value="response">Sort: Response %</option>
+                <option value="name">Sort: Name</option>
+              </select>
+            </div>
+          </div>
+
+          {filtered.length===0&&(
+            <Card style={{padding:"20px",textAlign:"center",color:C.chalkDim,fontSize:13}}>
+              No player data for selected filters yet.
+            </Card>
+          )}
+
+          {filtered.length>0&&(
+            <Card style={{overflow:"hidden"}}>
+              {/* Table header */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 52px 52px 90px 90px",
+                gap:8,padding:"8px 14px",background:C.blackLight,
+                borderBottom:`1px solid ${C.border}`}}>
+                {["Player","Played","Asked","Available","Response"].map((h,i)=>(
+                  <div key={h} style={{fontSize:9,color:C.amber,fontWeight:800,
+                    letterSpacing:"0.1em",textTransform:"uppercase",
+                    textAlign:i>0?"center":"left"}}>{h}</div>
+                ))}
+              </div>
+              {filtered.map((p,i)=>(
+                <div key={p.id} style={{display:"grid",gridTemplateColumns:"1fr 52px 52px 90px 90px",
+                  gap:8,padding:"10px 14px",
+                  borderBottom:i<filtered.length-1?`1px solid ${C.chalkFaint}`:"none",
+                  transition:"background 0.1s"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=C.blackLight}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+                >
+                  <div>
+                    <div style={{fontSize:13,fontWeight:600,color:C.chalk}}>{p.name}</div>
+                    <div style={{fontSize:10,color:C.chalkDim}}>{p.pos}</div>
+                  </div>
+                  <div style={{textAlign:"center",fontSize:15,fontWeight:800,
+                    color:p.played>0?C.amber:C.chalkDim,alignSelf:"center"}}>{p.played}</div>
+                  <div style={{textAlign:"center",fontSize:13,color:C.chalkDim,alignSelf:"center"}}>{p.totalAsked}</div>
+                  <div style={{alignSelf:"center"}}><RateBar value={p.availRate} color={C.green}/></div>
+                  <div style={{alignSelf:"center"}}><RateBar value={p.respRate}  color={C.blue}/></div>
+                </div>
+              ))}
+            </Card>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── App Root ─────────────────────────────────────────────────────────────────
 export default function App(){
   const [tab,    setTab]    =useState("dashboard");
@@ -919,10 +1205,11 @@ export default function App(){
   const goTo=(page,id=null)=>{setTab(page);setMatchId(id);};
 
   const TABS=[
-    {id:"dashboard",label:"Home",  icon:"⚑"},
-    {id:"matches",  label:"Matches",icon:"📅"},
-    {id:"squad",    label:"Squad",  icon:"👥"},
+    {id:"dashboard",label:"Home",    icon:"⚑"},
+    {id:"matches",  label:"Matches", icon:"📅"},
+    {id:"squad",    label:"Squad",   icon:"👥"},
     {id:"injuries", label:"Injuries",icon:"🩹"},
+    {id:"stats",    label:"Stats",   icon:"📊"},
   ];
 
   if(!loaded) return(
@@ -982,7 +1269,7 @@ export default function App(){
         {!isMatchView&&(
           <div style={{marginBottom:20}}>
             <h1 style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:isMobile?34:44,fontWeight:900,color:C.chalk,letterSpacing:"0.05em",textTransform:"uppercase",lineHeight:1}}>
-              {tab==="dashboard"?"Dashboard":tab==="squad"?"Squad":tab==="matches"?"Matches":"Injury Pool"}
+              {tab==="dashboard"?"Dashboard":tab==="squad"?"Squad":tab==="matches"?"Matches":tab==="stats"?"Stats":"Injury Pool"}
             </h1>
             <div style={{width:48,height:4,background:C.amber,borderRadius:99,marginTop:8}}/>
           </div>
@@ -993,6 +1280,7 @@ export default function App(){
         {tab==="matches"&&!isMatchView&&<MatchesPage matches={matches} onAdd={addMatch} onDelete={deleteMatch} onSelect={id=>setMatchId(id)}/>}
         {isMatchView&&<MatchView match={selectedMatch} squad={squad} injuries={injuries} onUpdate={updatePlayer} onInjure={p=>setInjureTarget(p)} onUpdateTeam={updateTeam} onBack={()=>setMatchId(null)}/>}
         {tab==="injuries"&&<InjuryPool squad={squad} injuries={injuries} onClear={clearInjury} onAdd={addInjury}/>}
+        {tab==="stats"&&<StatsPage matches={matches} squad={squad} injuries={injuries}/>}
       </main>
 
       {/* ── Mobile bottom nav ── */}
