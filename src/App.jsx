@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, onValue, set, update } from "firebase/database";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, 
+import { getAuth, signInWithEmailAndPassword, 
          signOut, onAuthStateChanged, sendPasswordResetEmail } from "firebase/auth";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1206,7 +1206,6 @@ function StatsPage({matches,squad,injuries}){
 
 // ─── Auth Screen ──────────────────────────────────────────────────────────────
 function AuthScreen(){
-  const [mode,setMode]=useState("login");
   const [email,setEmail]=useState("");
   const [password,setPassword]=useState("");
   const [error,setError]=useState("");
@@ -1217,17 +1216,11 @@ function AuthScreen(){
     if(!email.trim()||!password.trim()){setError("Email and password required");return;}
     setError(""); setLoading(true);
     try{
-      if(mode==="login"){
-        await signInWithEmailAndPassword(auth,email.trim(),password);
-      }else{
-        await createUserWithEmailAndPassword(auth,email.trim(),password);
-      }
+      await signInWithEmailAndPassword(auth,email.trim(),password);
     }catch(e){
-      if(e.code==="auth/email-already-in-use") setError("Email already registered — try logging in");
-      else if(e.code==="auth/invalid-email") setError("Invalid email address");
-      else if(e.code==="auth/weak-password") setError("Password must be at least 6 characters");
-      else if(e.code==="auth/user-not-found"||e.code==="auth/wrong-password") setError("Invalid email or password");
+      if(e.code==="auth/user-not-found"||e.code==="auth/wrong-password") setError("Invalid email or password");
       else if(e.code==="auth/invalid-credential") setError("Invalid email or password");
+      else if(e.code==="auth/invalid-email") setError("Invalid email address");
       else setError(e.message);
     }
     setLoading(false);
@@ -1273,7 +1266,7 @@ function AuthScreen(){
             <div style={{fontSize:13,color:C.chalkDim,lineHeight:1.6,marginBottom:20}}>
               Password reset link sent to <strong style={{color:C.chalk}}>{email}</strong>
             </div>
-            <button onClick={()=>{setResetSent(false);setMode("login");}}
+            <button onClick={()=>setResetSent(false)}
               style={{background:C.amber,border:"none",color:C.black,borderRadius:8,
                 padding:"10px 24px",fontSize:13,fontWeight:800,cursor:"pointer",
                 letterSpacing:"0.05em",textTransform:"uppercase"}}>
@@ -1282,19 +1275,7 @@ function AuthScreen(){
           </div>
         ):(
           <>
-            {/* Tab switcher */}
-            <div style={{display:"flex",background:C.blackLight,borderRadius:10,padding:4,gap:4,
-              marginBottom:20,border:`1px solid ${C.border}`}}>
-              {["login","signup"].map(m=>(
-                <button key={m} onClick={()=>{setMode(m);setError("");}}
-                  style={{flex:1,padding:"10px",borderRadius:8,border:"none",cursor:"pointer",
-                    fontWeight:800,fontSize:13,letterSpacing:"0.04em",textTransform:"uppercase",
-                    transition:"all 0.15s",background:mode===m?C.amber:"transparent",
-                    color:mode===m?C.black:C.chalkDim}}>
-                  {m==="login"?"Log In":"Sign Up"}
-                </button>
-              ))}
-            </div>
+
 
             {/* Form */}
             <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -1310,8 +1291,8 @@ function AuthScreen(){
                 <Label>Password</Label>
                 <input value={password} onChange={e=>setPassword(e.target.value)}
                   onKeyDown={e=>{if(e.key==="Enter")handleAuth();}}
-                  type="password" placeholder={mode==="signup"?"Min 6 characters":"••••••••"}
-                  autoComplete={mode==="login"?"current-password":"new-password"}
+                  type="password" placeholder="••••••••"
+                  autoComplete="current-password"
                   style={{width:"100%",background:C.blackLight,border:`1px solid ${C.border}`,
                     color:C.chalk,borderRadius:8,padding:"11px 14px",fontSize:14,outline:"none"}}/>
               </div>
@@ -1327,16 +1308,14 @@ function AuthScreen(){
                 style={{width:"100%",background:C.amber,border:"none",color:C.black,
                   borderRadius:8,padding:"12px",fontSize:14,fontWeight:800,cursor:loading?"wait":"pointer",
                   letterSpacing:"0.05em",textTransform:"uppercase",opacity:loading?0.5:1}}>
-                {loading?"Please wait...":(mode==="login"?"Log In":"Create Account")}
+                {loading?"Please wait...":"Log In"}
               </button>
 
-              {mode==="login"&&(
-                <button onClick={handleReset}
-                  style={{background:"none",border:"none",color:C.chalkDim,fontSize:12,
-                    cursor:"pointer",textAlign:"center",textDecoration:"underline"}}>
-                  Forgot password?
-                </button>
-              )}
+              <button onClick={handleReset}
+                style={{background:"none",border:"none",color:C.chalkDim,fontSize:12,
+                  cursor:"pointer",textAlign:"center",textDecoration:"underline"}}>
+                Forgot password?
+              </button>
             </div>
           </>
         )}
@@ -1515,7 +1494,7 @@ function AppContent(){
       />
     </div>
   );
-
+}
 
 // ─── Auth Wrapper ─────────────────────────────────────────────────────────────
 export default function App(){
@@ -1542,4 +1521,4 @@ export default function App(){
 
   if(!user) return <AuthScreen/>;
   return <AppContent/>;
-}}
+}
