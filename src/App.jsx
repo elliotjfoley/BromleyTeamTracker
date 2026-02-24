@@ -338,6 +338,23 @@ function PlayerCard({player,matchData,onUpdate,onInjure}){
         </div>
       </div>
 
+      {/* WhatsApp quick message */}
+      {comm==="not_contacted"&&(
+        <button onClick={()=>{
+          const firstName=player.name.split(" ")[0];
+          const opponent=matchData.matchTitle?matchData.matchTitle.split(" vs ")[1].split(" on ")[0]:"the opposition";
+          const msg=`Hi ${firstName}, any chance you're available this Saturday for the game against ${opponent}?`;
+          window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`,"_blank");
+        }} style={{
+          width:"100%",background:"#25d366",border:"none",color:"white",
+          borderRadius:8,padding:"10px 14px",fontSize:13,fontWeight:700,
+          cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8
+        }}>
+          <span style={{fontSize:16}}>💬</span>
+          <span>WhatsApp {player.name.split(" ")[0]}</span>
+        </button>
+      )}
+
       {/* Assigned to — hidden once player is available */}
       {avail!=="available"&&(
         <div>
@@ -597,12 +614,16 @@ function CommsTracker({match,squad,injuries,onUpdate,onInjure}){
         <div style={{fontSize:11,color:C.chalkDim,textAlign:"right"}}>{filtered.length} of {active.length} players</div>
       </Card>
       {filtered.length===0&&<div style={{color:C.chalkDim,fontSize:13,textAlign:"center",padding:"24px 0"}}>No players match filters.</div>}
-      {filtered.map(p=>(
-        <PlayerCard key={p.id} player={p} matchData={players[p.id]}
-          onUpdate={patch=>onUpdate(match.id,p.id,patch)}
-          onInjure={()=>onInjure(p)}
-        />
-      ))}
+      {filtered.map(p=>{
+        const md=players[p.id]||{};
+        const matchTitle=`${match.homeTeam} vs ${match.awayTeam} on ${fmtDate(match.date)}`;
+        return(
+          <PlayerCard key={p.id} player={p} matchData={{...md,matchTitle}}
+            onUpdate={patch=>onUpdate(match.id,p.id,patch)}
+            onInjure={()=>onInjure(p)}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -1494,7 +1515,7 @@ function AppContent(){
       />
     </div>
   );
-}
+
 
 // ─── Auth Wrapper ─────────────────────────────────────────────────────────────
 export default function App(){
@@ -1521,4 +1542,4 @@ export default function App(){
 
   if(!user) return <AuthScreen/>;
   return <AppContent/>;
-}
+}}
