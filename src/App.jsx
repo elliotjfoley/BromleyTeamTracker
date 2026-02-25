@@ -60,10 +60,11 @@ const POSITIONS = [
 ];
 
 const AVAIL = {
-  unknown:     { label:"Unknown",     color:C.chalkDim, icon:"??" },
-  available:   { label:"Available",   color:C.green,    icon:"✓" },
-  unavailable: { label:"Unavailable", color:C.red,      icon:"✗" },
-  tentative:   { label:"Tentative",   color:C.amber,    icon:"~" },
+  unknown:      { label:"Unknown",        color:C.chalkDim, icon:"??" },
+  available:    { label:"Available",      color:C.green,    icon:"✓" },
+  unavailable:  { label:"Unavailable",    color:C.red,      icon:"✗" },
+  tentative:    { label:"Tentative",      color:C.amber,    icon:"~" },
+  selected_2xv: { label:"Selected 2XV",   color:C.blue,     icon:"2" },
 };
 
 const COMM = {
@@ -408,7 +409,7 @@ function TeamBuilder({match,squad,injuries,onUpdateTeam}){
   const isMobile=useIsMobile();
   const [copied,setCopied]=useState(false);
   const active=squad.filter(p=>!injuries[p.id]);
-  const eligible=active.filter(p=>(match.players||{})[p.id]?.availability==="available");
+  const eligible=active.filter(p=>{const av=(match.players||{})[p.id]?.availability; return av==="available";});
   const team=match.team||{};
   const assignedIds=new Set(Object.values(team).filter(Boolean));
 
@@ -505,7 +506,7 @@ function TeamBuilder({match,squad,injuries,onUpdateTeam}){
         <Card style={{padding:"24px 20px",textAlign:"center",color:C.chalkDim}}>
           No players marked as <strong style={{color:C.green}}>Available</strong> yet.
           <span style={{fontSize:12,marginTop:6,display:"block"}}>
-            Use the Comms Tracker tab to set availability first.
+            Use the Comms Tracker tab to set availability. Players marked as "Selected 2XV" won't appear here.
           </span>
         </Card>
       )}
@@ -1515,7 +1516,7 @@ function AppContent(){
       />
     </div>
   );
-}
+
 
 // ─── Auth Wrapper ─────────────────────────────────────────────────────────────
 export default function App(){
@@ -1542,4 +1543,4 @@ export default function App(){
 
   if(!user) return <AuthScreen/>;
   return <AppContent/>;
-}
+}}
