@@ -1516,7 +1516,7 @@ function AppContent(){
       />
     </div>
   );
-
+}
 
 // ─── Auth Wrapper ─────────────────────────────────────────────────────────────
 export default function App(){
@@ -1543,4 +1543,4 @@ export default function App(){
 
   if(!user) return <AuthScreen/>;
   return <AppContent/>;
-}}
+}
